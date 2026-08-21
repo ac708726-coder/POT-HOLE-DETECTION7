@@ -216,3 +216,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Pothole detection project data and generated artifacts
+data/raw/
+data/processed/
+data/splits/
+runs/
+models/*.pt
+yolo*.pt
+database/*.db
+outputs/images/*
+outputs/videos/*
+outputs/reports/*
+outputs/metrics/*
+
+# Preserve documented placeholders
+!models/README.md
+!outputs/images/.gitkeep
+!outputs/videos/.gitkeep
+!outputs/reports/.gitkeep
+!outputs/metrics/.gitkeep
