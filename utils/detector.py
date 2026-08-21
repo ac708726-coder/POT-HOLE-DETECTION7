@@ -106,7 +106,13 @@ def _load_model_cached(
         ) from exc
 
     try:
-        return YOLO(str(path))
+        model = YOLO(str(path))
+        fuse = getattr(model, "fuse", None)
+        if callable(fuse):
+            fused_model = fuse()
+            if fused_model is not None:
+                model = fused_model
+        return model
     except Exception as exc:  # Ultralytics raises several backend-specific error types.
         raise DetectorError(
             f"The model at '{path}' could not be loaded: {exc}"

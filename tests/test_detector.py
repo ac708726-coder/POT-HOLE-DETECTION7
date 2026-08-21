@@ -143,3 +143,27 @@ def test_model_reloads_when_checkpoint_changes(
     assert first is cached
     assert replacement is not first
     assert len(created_models) == 2
+
+
+def test_loaded_model_fuses_supported_layers_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FusibleModel:
+        def __init__(self) -> None:
+            self.fuse_calls = 0
+
+        def fuse(self) -> FusibleModel:
+            self.fuse_calls += 1
+            return self
+
+    model = FusibleModel()
+    monkeypatch.setitem(
+        sys.modules, "ultralytics", SimpleNamespace(YOLO=lambda path: model)
+    )
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"checkpoint")
+    load_model.cache_clear()
+
+    assert load_model(weights) is model
+    assert load_model(weights) is model
+    assert model.fuse_calls == 1
