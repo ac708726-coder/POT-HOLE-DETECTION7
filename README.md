@@ -109,7 +109,7 @@ Central settings live in `config.py`:
 
 - Image types: JPG, JPEG, PNG; maximum 10 MB.
 - Video types: MP4, MOV, AVI; maximum 200 MB and five minutes.
-- Default confidence: 0.35, near the measured high-precision operating point.
+- Default confidence: 0.35, a selective starting point that can be lowered when recall matters more.
 - Default IoU threshold: 0.45.
 - Database: `database/potholes.db`, created only when history is used.
 
@@ -134,15 +134,15 @@ held-out split containing 660 pothole boxes.
 
 | Metric | Result |
 |---|---:|
-| Precision | 0.5027 |
-| Recall | 0.3712 |
-| mAP@0.50 | 0.3816 |
-| mAP@0.50–0.95 | 0.1639 |
+| Precision | 0.4820 |
+| Recall | 0.4015 |
+| mAP@0.50 | 0.4011 |
+| mAP@0.50–0.95 | 0.1769 |
 | GPU inference time | 5.7 ms/image |
 
 These results do not meet the aspirational PRD targets. Improving them requires more
 training and data balancing/curation; they must not be presented as production accuracy.
-The test precision curve reaches 0.700 at approximately 0.36 confidence, with recall
-falling to 0.261. This is a high-precision operating point, not 70% overall accuracy.
+The confidence control changes the precision/recall tradeoff; a confidence percentage
+must not be presented as overall model accuracy.
 
 See `docs/user_guide.md`, `docs/model_card.md`, and `docs/PRD.md` for further details.
