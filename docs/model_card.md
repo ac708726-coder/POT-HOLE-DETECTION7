@@ -10,9 +10,9 @@
 - Model family: YOLO11s, fine-tuned from pretrained PyTorch weights
 - Input image size: 640 × 640
 - Dataset: all seven RDD2022 country subsets, D40 converted to class `pothole`
-- Training: 25 recorded epochs, batch 16, AdamW, seed 42, CUDA AMP
+- Training: 25 base epochs plus 8 low-rate refinement epochs, batch 16, seed 42, CUDA AMP
 - Prepared training split: 6,395 images and 4,611 pothole boxes
-- Selected checkpoint: epoch 25 by validation fitness
+- Selected checkpoint: refinement epoch 8 by validation fitness
 
 ## Intended use
 
@@ -28,17 +28,16 @@ only other road-damage classes are retained as negative examples.
 
 | Metric | Held-out test result |
 |---|---:|
-| Precision | 0.5027 |
-| Recall | 0.3712 |
-| mAP@0.50 | 0.3816 |
-| mAP@0.50–0.95 | 0.1639 |
+| Precision | 0.4820 |
+| Recall | 0.4015 |
+| mAP@0.50 | 0.4011 |
+| mAP@0.50–0.95 | 0.1769 |
 | GPU inference time | 5.7 ms/image |
 
 Metrics were produced by `training/evaluate.py` on the untouched 3,925-image
 multinational test split and are saved in `outputs/metrics/test_metrics.json`. These
-values remain below the PRD's aspirational quality targets. On this test set, the
-precision-confidence curve first reaches 0.700 at approximately 0.36 confidence, where
-recall is 0.261. That operating point is not equivalent to 70% overall accuracy.
+values remain below the PRD's aspirational quality targets. Confidence changes the
+precision/recall tradeoff and is not equivalent to overall accuracy.
 
 ## Known limitations
 

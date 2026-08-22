@@ -19,6 +19,13 @@ def parse_args() -> argparse.Namespace:
         "--data", type=Path, default=PROJECT_ROOT / "data" / "potholes.yaml"
     )
     parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--batch", type=int, default=16)
+    parser.add_argument("--name", default="test_evaluation")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=PROJECT_ROOT / "outputs" / "metrics" / "test_metrics.json",
+    )
     parser.add_argument("--device", default=None)
     return parser.parse_args()
 
@@ -46,8 +53,9 @@ def main() -> None:
         "data": str(args.data),
         "split": "test",
         "imgsz": args.imgsz,
+        "batch": args.batch,
         "project": str(PROJECT_ROOT / "outputs" / "metrics"),
-        "name": "test_evaluation",
+        "name": args.name,
         "plots": True,
     }
     selected_device = args.device
@@ -66,7 +74,7 @@ def main() -> None:
         "map50_95": _number(getattr(box, "map", None)),
         "speed_ms_per_image": dict(getattr(metrics, "speed", {})),
     }
-    output_path = PROJECT_ROOT / "outputs" / "metrics" / "test_metrics.json"
+    output_path = args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))

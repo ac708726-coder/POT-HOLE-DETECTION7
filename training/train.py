@@ -22,6 +22,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--name", default="baseline")
     parser.add_argument("--device", default=None, help="For example: cpu, 0, or 0,1")
+    parser.add_argument(
+        "--accuracy-preset",
+        action="store_true",
+        help=(
+            "Use a conservative low-learning-rate continuation preset for an "
+            "existing pothole checkpoint"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -53,6 +61,31 @@ def main() -> None:
         "seed": 42,
         "deterministic": True,
     }
+    if args.accuracy_preset:
+        options.update(
+            {
+                "optimizer": "AdamW",
+                # Continue below the final learning rate of the 25-epoch base run;
+                # raising it here erased useful localization features.
+                "lr0": 0.0001,
+                "lrf": 0.1,
+                "warmup_epochs": 0.0,
+                "warmup_bias_lr": 0.0,
+                "warmup_momentum": 0.9,
+                "weight_decay": 0.0005,
+                "patience": min(12, max(6, args.epochs)),
+                "close_mosaic": 0,
+                "mosaic": 0.0,
+                "degrees": 2.0,
+                "translate": 0.05,
+                "scale": 0.2,
+                "perspective": 0.0001,
+                "fliplr": 0.5,
+                "amp": True,
+                "plots": True,
+                "save_period": 5,
+            }
+        )
     options["device"] = selected_device
     model.train(**options)
 
