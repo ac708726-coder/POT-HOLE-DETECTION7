@@ -19,6 +19,7 @@ from utils.detector import (
     inference_profile_details,
     inference_runtime_details,
     predict_image,
+    warm_up_model,
 )
 from utils.image_processor import decode_image, encode_image, image_metadata
 from utils.severity import estimate_apparent_severity, summarize_severity
@@ -124,6 +125,11 @@ if not model_ready:
         "See `models/README.md` for setup instructions.",
         icon=":material/model_training:",
     )
+
+# The controls above have rendered and the user is still choosing settings, so this is
+# the cheapest moment to absorb model start-up cost before the first real scan.
+if model_ready:
+    warm_up_model()
 
 if detect_clicked:
     try:

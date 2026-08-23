@@ -121,3 +121,53 @@ def test_default_fast_video_path_batches_frames(
     assert batch_lengths == [4, 4]
     assert result["video_batch_size"] == 4
     assert result["processed_frames"] == 8
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("cv2") is None, reason="OpenCV not installed"
+)
+def test_balanced_video_path_batches_at_reduced_size(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Augmented profiles must still batch, at a halved size for memory headroom."""
+
+    import cv2
+
+    from utils import video_processor
+
+    input_path = tmp_path / "balanced_input.avi"
+    output_path = tmp_path / "balanced_output.mp4"
+    writer = cv2.VideoWriter(
+        str(input_path), cv2.VideoWriter_fourcc(*"MJPG"), 5.0, (64, 48)
+    )
+    if not writer.isOpened():
+        pytest.skip("Test video codec unavailable")
+    for _ in range(8):
+        writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
+    writer.release()
+
+    batch_lengths: list[int] = []
+
+    def fake_batch(images, **kwargs):
+        assert kwargs["inference_profile"] == "balanced"
+        batch_lengths.append(len(images))
+        return [{"detections": []} for _ in images]
+
+    monkeypatch.setattr(video_processor, "predict_images", fake_batch)
+    monkeypatch.setattr(
+        video_processor,
+        "inference_runtime_details",
+        lambda: {
+            "device": "cuda",
+            "runtime_label": "GPU accelerated",
+            "precision": "FP16",
+            "video_batch_size": 4,
+        },
+    )
+
+    result = video_processor.process_video(
+        input_path, output_path, inference_profile="balanced"
+    )
+    assert result["video_batch_size"] == 2
+    assert batch_lengths == [2, 2, 2, 2]
+    assert result["processed_frames"] == 8

@@ -57,6 +57,9 @@ def _runtime_predict_options() -> dict[str, Any]:
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
         torch.set_float32_matmul_precision("high")
+        # Ultralytics 8.4.x takes `quantize`; the older `half` kwarg still works but
+        # emits a deprecation warning on every predict call. Verified on this repo's
+        # pinned 8.4.125: quantize=16 puts model parameters in torch.float16.
         return {"device": 0, "quantize": 16}
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         return {"device": "mps"}
@@ -140,6 +143,39 @@ def load_model(weights_path: str | Path = MODEL_PATH) -> Any:
 load_model.cache_clear = _load_model_cached.cache_clear  # type: ignore[attr-defined]
 
 
+_warmed_up = False
+
+
+def warm_up_model(model: Any | None = None) -> bool:
+    """Run one throwaway inference so the first real scan does not pay start-up cost.
+
+    The first prediction after load pays CUDA context creation, kernel autotuning, and
+    lazy weight materialization, which can dominate a single user-facing scan. Calling
+    this while the page renders moves that cost off the first request.
+
+    Best effort by design: warm-up failures are swallowed so a missing or broken
+    checkpoint still surfaces through the normal prediction path, with its specific
+    error message, instead of breaking page rendering.
+    """
+
+    global _warmed_up
+    if _warmed_up:
+        return True
+    try:
+        active_model = model if model is not None else load_model()
+        active_model.predict(
+            source=np.zeros((640, 640, 3), dtype=np.uint8),
+            verbose=False,
+            **_runtime_predict_options(),
+        )
+    except Exception:  # noqa: BLE001 - optional warm-up must never break page render.
+        # Backends raise arbitrary types here, and the real scan re-runs the same
+        # calls and reports their specific error, so nothing is hidden by this.
+        return False
+    _warmed_up = True
+    return True
+
+
 def _as_numpy(value: Any) -> np.ndarray:
     if value is None:
         return np.asarray([])
@@ -214,19 +250,47 @@ def _box_iou(first: list[float], second: list[float]) -> float:
 def _merge_detections(
     detections: list[dict[str, Any]], iou_threshold: float
 ) -> list[dict[str, Any]]:
-    """Merge duplicate detections from multiple inference passes with NMS."""
+    """Merge duplicate detections from multiple inference passes.
+
+    Clusters overlapping same-class boxes (NMS-style) and fuses each cluster into a
+    single confidence-weighted box average (Weighted Boxes Fusion) rather than
+    discarding every non-maximal box outright. This keeps the reported confidence of
+    the best pass while sharpening localization by averaging in the other passes'
+    agreeing boxes, which improves box accuracy when merging multi-scale/augmented
+    inference passes ("balanced"/"thorough" profiles).
+    """
 
     ordered = sorted(detections, key=lambda item: item["confidence"], reverse=True)
     kept: list[dict[str, Any]] = []
+    clusters: list[list[dict[str, Any]]] = []
     for candidate in ordered:
-        duplicate = any(
-            candidate["class_id"] == existing["class_id"]
-            and _box_iou(candidate["box"], existing["box"]) >= iou_threshold
-            for existing in kept
+        match_index = next(
+            (
+                index
+                for index, existing in enumerate(kept)
+                if candidate["class_id"] == existing["class_id"]
+                and _box_iou(candidate["box"], existing["box"]) >= iou_threshold
+            ),
+            None,
         )
-        if not duplicate:
+        if match_index is None:
             kept.append(candidate)
-    return kept
+            clusters.append([candidate])
+        else:
+            clusters[match_index].append(candidate)
+
+    fused: list[dict[str, Any]] = []
+    for representative, cluster in zip(kept, clusters):
+        total_weight = sum(member["confidence"] for member in cluster)
+        fused_box = [
+            sum(member["box"][index] * member["confidence"] for member in cluster)
+            / total_weight
+            for index in range(4)
+        ]
+        merged = dict(representative)
+        merged["box"] = fused_box
+        fused.append(merged)
+    return fused
 
 
 def inference_profile_details(profile: str) -> dict[str, Any]:

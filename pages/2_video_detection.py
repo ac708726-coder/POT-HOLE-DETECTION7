@@ -9,7 +9,12 @@ from tempfile import TemporaryDirectory
 import streamlit as st
 
 from config import DEFAULT_CONFIDENCE, MAX_VIDEO_SIZE_MB, MODEL_PATH
-from utils.detector import DetectorError, ModelNotFoundError, inference_profile_details
+from utils.detector import (
+    DetectorError,
+    ModelNotFoundError,
+    inference_profile_details,
+    warm_up_model,
+)
 from utils.storage import create_detection_record
 from utils.ui import media_stamp, page_intro, scanning_banner, section_heading
 from utils.validators import (
@@ -112,6 +117,11 @@ if not model_ready:
         "Video processing is unavailable because `models/best.pt` is missing.",
         icon=":material/model_training:",
     )
+
+# The controls above have rendered and the user is still choosing settings, so this is
+# the cheapest moment to absorb model start-up cost before the first real scan.
+if model_ready:
+    warm_up_model()
 
 if process_clicked:
     progress = st.progress(0, text="Preparing video…")
