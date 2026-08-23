@@ -237,5 +237,3 @@ outputs/metrics/*
 !outputs/reports/.gitkeep
 !outputs/metrics/.gitkeep
 
-# Claude Code local state (worktree metadata must never be committed)
-.claude/
