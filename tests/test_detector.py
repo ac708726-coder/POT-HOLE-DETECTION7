@@ -92,6 +92,35 @@ def test_multi_pass_merge_removes_overlapping_duplicate() -> None:
     assert [item["confidence"] for item in merged] == [0.9, 0.7]
 
 
+def test_merge_keeps_winning_box_coordinates_untouched() -> None:
+    """Merging drops the weaker overlap and leaves the winner's box exactly as it was.
+
+    Averaging the cluster (Weighted Boxes Fusion) was measured and came out slightly
+    worse; see scripts/compare_box_merging.py. This pins the shipped behaviour so a
+    future fusion attempt has to update the test deliberately.
+    """
+
+    detections = [
+        {"class_id": 0, "confidence": 0.75, "box": [0.0, 0.0, 10.0, 10.0]},
+        {"class_id": 0, "confidence": 0.25, "box": [2.0, 0.0, 12.0, 10.0]},
+    ]
+    merged = _merge_detections(detections, iou_threshold=0.45)
+
+    assert len(merged) == 1
+    assert merged[0]["confidence"] == pytest.approx(0.75)
+    assert merged[0]["box"] == [0.0, 0.0, 10.0, 10.0]
+
+
+def test_merge_keeps_distinct_classes_separate() -> None:
+    detections = [
+        {"class_id": 0, "confidence": 0.9, "box": [0.0, 0.0, 10.0, 10.0]},
+        {"class_id": 1, "confidence": 0.8, "box": [0.0, 0.0, 10.0, 10.0]},
+    ]
+    merged = _merge_detections(detections, iou_threshold=0.45)
+
+    assert sorted(item["class_id"] for item in merged) == [0, 1]
+
+
 def test_unknown_inference_profile_is_rejected() -> None:
     with pytest.raises(ValidationError, match="Inference profile"):
         inference_profile_details("unknown")
@@ -111,6 +140,45 @@ def test_batch_prediction_preserves_result_order() -> None:
     assert len(results) == 2
     assert [result["count"] for result in results] == [1, 1]
     assert all(result["annotated_image"].size == (100, 80) for result in results)
+
+
+def test_warm_up_runs_once_and_is_reported() -> None:
+    from utils import detector
+
+    class CountingModel:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def predict(self, **kwargs):
+            self.calls += 1
+            assert kwargs["source"].shape == (640, 640, 3)
+            return [FakeResult()]
+
+    monkeypatched = CountingModel()
+    detector._warmed_up = False
+    try:
+        assert detector.warm_up_model(monkeypatched) is True
+        assert detector.warm_up_model(monkeypatched) is True
+        assert monkeypatched.calls == 1
+    finally:
+        detector._warmed_up = False
+
+
+def test_warm_up_failure_is_swallowed_and_retryable() -> None:
+    from utils import detector
+
+    class WarmableModel:
+        def predict(self, **kwargs):
+            return [FakeResult()]
+
+    detector._warmed_up = False
+    try:
+        # A broken checkpoint must not raise out of warm-up...
+        assert detector.warm_up_model(FailingModel()) is False
+        # ...and must not be cached, so a later working model still warms up.
+        assert detector.warm_up_model(WarmableModel()) is True
+    finally:
+        detector._warmed_up = False
 
 
 def test_missing_model_has_clear_error(tmp_path: Path) -> None:

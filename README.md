@@ -10,10 +10,15 @@ TensorFlow, Keras, and ONNX Runtime are not used.
 ## Current status
 
 The application, utilities, RDD2022 data pipeline, tests, documentation, and trained
-checkpoint are implemented. `models/best.pt` is a YOLO11s checkpoint fine-tuned for
-25 epochs on the seven RDD2022 country subsets using PyTorch 2.11.0 with CUDA 13.0 and
-an RTX 4060 Laptop GPU. It improves geographic coverage and strict localization, but
-it is not a production-quality road-safety model.
+checkpoint are implemented. `models/best.pt` is a YOLO11s checkpoint fine-tuned on the
+seven RDD2022 country subsets for 25 base epochs plus an 8-epoch low-rate refinement
+stage, trained with PyTorch 2.11.0 on CUDA 13.0 and an RTX 4060 Laptop GPU. It improves
+geographic coverage and strict localization, but it is not a production-quality
+road-safety model.
+
+Run every command below through the project virtual environment at `.venv`, which is
+where the pinned CUDA build of PyTorch lives. A bare `python` on PATH may resolve to a
+different interpreter with a CPU-only torch, which silently disables GPU inference.
 
 ## Setup on Windows PowerShell
 
@@ -92,6 +97,31 @@ Training downloads the selected pretrained checkpoint if Ultralytics does not al
 have it locally. Record every run in `training/experiments.md`. Evaluation writes
 held-out metrics and plots under `outputs/metrics`.
 
+`training/experiments.md` carries a **Planned runs** queue with the exact commands for
+the next accuracy attempts. Before starting one, confirm all three prerequisites:
+
+```powershell
+python -c "import torch, ultralytics; print(torch.__version__, torch.cuda.is_available())"
+Test-Path 'data\processed\images\train'
+python scripts\check_dataset.py --root data\processed
+```
+
+Training needs the prepared dataset, so run the `prepare_dataset.py` command above first
+if `data/processed` does not exist. Long runs benefit from `--patience` (early stopping)
+and `--save-period` (periodic checkpoints); an interrupted run continues with:
+
+```powershell
+python training/train.py --name <run-name> --resume
+```
+
+After a run beats the current checkpoint on the held-out split, promote it and re-record
+the metrics in `docs/model_card.md` and this file:
+
+```powershell
+Copy-Item -LiteralPath 'runs\pothole\<run-name>\weights\best.pt' -Destination 'models\best.pt'
+python training/evaluate.py
+```
+
 ## Tests and code checks
 
 ```powershell
@@ -115,9 +145,27 @@ Central settings live in `config.py`:
 
 Image inference includes three PyTorch modes: Fast uses one standard 640-pixel pass,
 Balanced uses test-time augmentation, and Thorough merges augmented 640- and 960-pixel
-passes with non-maximum suppression. Video defaults to Fast mode to preserve throughput.
-CUDA laptops automatically use FP16 inference and four-frame video batching. CPU-only
-laptops stay on FP32 with batch size one, so the same code remains portable.
+passes. Overlapping boxes from multiple passes are merged with NMS. Video defaults to
+Fast mode to preserve throughput.
+CUDA laptops automatically use FP16 inference and four-frame video batching. Balanced
+video mode also batches, at half that size, because test-time augmentation multiplies
+activation memory per frame. CPU-only laptops stay on FP32 with batch size one, so the
+same code remains portable.
+
+Both detection pages warm the model up once while the upload controls are on screen, so
+the first real scan does not pay CUDA context and autotuning cost. Warm-up is best
+effort: if the checkpoint is missing or broken, the page still renders and the error is
+reported by the scan itself.
+
+Verify the GPU path is actually active before benchmarking, because installing
+`requirements.txt` without the CUDA index URL above silently yields a CPU-only build:
+
+```powershell
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+A `+cpu` version string or `False` means inference runs on CPU regardless of the
+available hardware.
 
 ## Limitations
 
@@ -132,13 +180,19 @@ decisions.
 The selected checkpoint was evaluated once on the untouched 3,925-image multinational
 held-out split containing 660 pothole boxes.
 
-| Metric | Result |
-|---|---:|
-| Precision | 0.4820 |
-| Recall | 0.4015 |
-| mAP@0.50 | 0.4011 |
-| mAP@0.50–0.95 | 0.1769 |
-| GPU inference time | 5.7 ms/image |
+| Metric | Installed | 60-epoch stage | Earlier checkpoint |
+|---|---:|---:|---:|
+| Precision | **0.5520** | 0.5300 | 0.4820 |
+| Recall | 0.4136 | 0.4212 | 0.4015 |
+| mAP@0.50 | **0.4334** | 0.4260 | 0.4011 |
+| mAP@0.50–0.95 | **0.1992** | 0.1960 | 0.1769 |
+| GPU inference time | 5.7 ms/image | 5.7 ms/image | 5.5 ms/image |
+
+All columns come from the same script and the same split, evaluated on the same day, so
+they are directly comparable. Two changes produced the gain: training length (the earlier
+checkpoint's schedule ended while the model was still improving), then a low-rate AdamW
+refinement stage on top. Recall is the one metric the refinement stage did not improve —
+it traded a little recall for more precision.
 
 These results do not meet the aspirational PRD targets. Improving them requires more
 training and data balancing/curation; they must not be presented as production accuracy.

@@ -96,11 +96,17 @@ def process_video(
     inference_frames = 0
     last_tracked: list[dict[str, Any]] = []
     runtime = inference_runtime_details()
-    batch_size = (
-        int(runtime["video_batch_size"])
-        if prediction_function is predict_image and inference_profile == "fast"
-        else 1
-    )
+    device_batch_size = int(runtime["video_batch_size"])
+    if prediction_function is not predict_image:
+        # A caller-supplied prediction function has no batched counterpart.
+        batch_size = 1
+    elif inference_profile == "fast":
+        batch_size = device_batch_size
+    else:
+        # Augmented profiles run test-time augmentation internally, which multiplies
+        # activation memory per image. Halve the batch so these modes still benefit
+        # from batching without risking out-of-memory on small GPUs.
+        batch_size = max(1, device_batch_size // 2)
     pending_frames: list[tuple[int, np.ndarray]] = []
     pending_inference_frames = 0
     started = perf_counter()

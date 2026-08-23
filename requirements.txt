@@ -1,7 +1,12 @@
+# NOTE: `pip install -r requirements.txt` installs a CPU-only torch on Windows.
+# For GPU training and FP16 inference, install torch from the CUDA index FIRST
+# (see the setup section in README.md), then install this file. Verify with:
+#   python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+# A "+cpu" version string means the GPU path is inactive.
 streamlit==1.62.0
 ultralytics==8.4.125
 torch==2.11.0
-opencv-python==4.14.0.92
+opencv-python==4.14.0.94
 pillow==12.3.0
 numpy==2.5.2
 pandas==3.0.5
