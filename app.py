@@ -8,7 +8,7 @@ from config import MODEL_PATH, ensure_runtime_directories
 from utils.ui import apply_app_style, brand, hero, hero_brief, section_heading
 
 st.set_page_config(
-    page_title="Surface/01 — Road intelligence",
+    page_title="Divot — Road intelligence",
     page_icon=":material/add_road:",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -24,7 +24,7 @@ def home() -> None:
     hero(
         "Road intelligence / redefined",
         "Every impact leaves a signature.",
-        "Surface/01 turns road images and video into visible, reviewable pothole candidates—without hiding uncertainty.",
+        "Divot turns road images and video into visible, reviewable pothole candidates—without hiding uncertainty.",
         ready=model_ready,
     )
     hero_brief()

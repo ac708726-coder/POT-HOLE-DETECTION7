@@ -17,7 +17,6 @@ from utils.detector import (
     DetectorError,
     ModelNotFoundError,
     inference_profile_details,
-    inference_runtime_details,
     predict_image,
     warm_up_model,
 )
@@ -137,9 +136,7 @@ if detect_clicked:
         with st.status("Scanning image…", expanded=True) as status:
             st.write(f"Using {selected_profile['label']} mode")
             pass_count = selected_profile["pass_count"]
-            st.write(
-                f"Running {pass_count} model {'pass' if pass_count == 1 else 'passes'}"
-            )
+            st.write(f"Running {pass_count} {'pass' if pass_count == 1 else 'passes'}")
             result = predict_image(
                 original_image,
                 confidence=confidence,
@@ -192,12 +189,8 @@ average_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 metric_a, metric_b, metric_c, metric_d = st.columns(4)
 metric_a.metric("Potholes", result["count"])
 metric_b.metric("Average confidence", f"{average_confidence:.0%}")
-metric_c.metric("Inference time", f"{result['inference_ms']:.0f} ms")
+metric_c.metric("Scan time", f"{result['inference_ms']:.0f} ms")
 metric_d.metric("Scan mode", selected_profile["label"])
-runtime = result.get("runtime", inference_runtime_details())
-st.caption(
-    f"Optimized PyTorch runtime: {runtime['runtime_label']} · {runtime['precision']}"
-)
 
 if result["count"] == 0:
     st.warning(

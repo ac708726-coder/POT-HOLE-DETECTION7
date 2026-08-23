@@ -178,11 +178,6 @@ metric_a.metric("Unique potholes (estimate)", details["unique_count_estimate"])
 metric_b.metric("Processing time", f"{details['processing_seconds']:.1f} s")
 metric_c.metric("Processing speed", f"{details['processing_fps']:.1f} FPS")
 metric_d.metric("Mode", inference_profile_details(str(mode))["label"])
-runtime = details["runtime"]
-st.caption(
-    f"Optimized PyTorch runtime: {runtime['runtime_label']} · {runtime['precision']} · "
-    f"batch size {details['video_batch_size']}"
-)
 
 with st.container(border=True):
     st.video(saved["video_bytes"], format="video/mp4")
