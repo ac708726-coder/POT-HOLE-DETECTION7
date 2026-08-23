@@ -120,3 +120,64 @@ commit — schema changes so far have been additive (`initialize_database` adds
 `user_id` if missing), so an older build reads a newer database without failing.
 If a release does change the schema destructively, take a backup first and say
 so in the release notes.
+
+## 9. Streamlit Community Cloud
+
+The fastest way to get a public URL, with one limitation that decides whether
+it is suitable at all.
+
+### The storage caveat — read this first
+
+**Community Cloud has no persistent disk.** The container is rebuilt on every
+redeploy, on every reboot, and after the app sleeps from inactivity. When that
+happens `database/potholes.db` is gone, which means **every account and every
+saved detection is erased**. People will find themselves unable to sign in with
+the password they just set.
+
+That is fine for a demo or a portfolio link. It is not fine for anything real.
+For durable accounts you need a host with a mounted volume — a small VM, Fly.io
+with a volume, Railway, or a container platform — following sections 1 to 8.
+`scripts/backup_database.py` cannot save you here either: it writes to the same
+disappearing disk.
+
+If you deploy to Community Cloud anyway, say so on the sign-in screen so nobody
+treats the account as permanent.
+
+### Steps
+
+1. Push this branch and open <https://share.streamlit.io>, then sign in with
+   the GitHub account that owns the repository.
+2. **New app** -> **Deploy a public app from GitHub**, and select:
+   - Repository: `ac708726-coder/POT-HOLE-DETECTION7`
+   - Branch: `deploy/streamlit-cloud`
+   - Main file path: `app.py`
+   - Python version: 3.12
+3. Under **Advanced settings**, paste into the secrets box:
+
+   ```toml
+   POTHOLE_LOG_LEVEL = "INFO"
+   ```
+
+   Streamlit exposes secrets as environment variables, which is what
+   `config.py` reads. Leave the paths at their defaults; the model ships in the
+   repository and the database is created on first run.
+4. Deploy. The first build takes several minutes — it installs torch.
+
+### What this branch changes for the platform
+
+`requirements.txt` pins the CPU torch index and the headless OpenCV build.
+Without both, the build either exceeds the resource limit or fails at import on
+a missing `libGL`. If the build still reports a missing shared library, add a
+`packages.txt` at the repository root naming the apt package.
+
+### Expectations on the free tier
+
+- Roughly 1 GB of memory. The model loads in well under that, but video
+  processing on a long clip can approach it — keep test uploads short.
+- No GPU. Image detection takes a few seconds; a minute of video takes minutes.
+- The app sleeps after inactivity and cold-starts on the next visit, reloading
+  the model. First request after a sleep is slow — and, per the caveat above,
+  starts from an empty database.
+- HTTPS is provided by the platform, so section 2 is already satisfied.
+  Tracebacks are still worth hiding: set `STREAMLIT_CLIENT_SHOW_ERROR_DETAILS`
+  to `none` in the secrets box before sharing the link widely.
