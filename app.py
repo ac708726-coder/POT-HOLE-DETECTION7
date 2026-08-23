@@ -5,15 +5,26 @@ from __future__ import annotations
 import streamlit as st
 
 from config import MODEL_PATH, ensure_runtime_directories
-from utils.ui import apply_app_style, brand, hero, hero_brief, section_heading
+from utils.auth import AuthError, create_user, user_count, verify_user
+from utils.observability import configure_logging, log_auth_event
+from utils.ui import (
+    account_badge,
+    apply_app_style,
+    brand,
+    hero,
+    hero_brief,
+    section_heading,
+    signin_shell,
+)
 
 st.set_page_config(
-    page_title="Surface/01 — Road intelligence",
+    page_title="Divot — Road intelligence",
     page_icon=":material/add_road:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 ensure_runtime_directories()
+configure_logging()
 apply_app_style()
 
 
@@ -24,7 +35,7 @@ def home() -> None:
     hero(
         "Road intelligence / redefined",
         "Every impact leaves a signature.",
-        "Surface/01 turns road images and video into visible, reviewable pothole candidates—without hiding uncertainty.",
+        "Divot turns road images and video into visible, reviewable pothole candidates—without hiding uncertainty.",
         ready=model_ready,
     )
     hero_brief()
@@ -58,8 +69,97 @@ def home() -> None:
     )
 
 
+def _sign_in_gate() -> None:
+    """Block the app until a visitor signs in, then keep them in session.
+
+    Streamlit session state lives on the server and is keyed to the browser
+    session, so closing the tab signs the person out. There is no cookie and
+    no "remember me"; that is the trade for not shipping a token store.
+    """
+
+    if st.session_state.get("user_id"):
+        return
+
+    signin_shell(
+        "Sign in",
+        "Detection history is saved per account. Nobody else can see yours.",
+    )
+
+    with st.container(key="auth_panel", border=False):
+        sign_in_tab, register_tab = st.tabs(["Sign in", "Create account"])
+
+        with sign_in_tab:
+            with st.form("sign_in", border=False):
+                username = st.text_input("Username", key="signin_username")
+                password = st.text_input(
+                    "Password", type="password", key="signin_password"
+                )
+                submitted = st.form_submit_button(
+                    "Sign in", type="primary", width="stretch"
+                )
+            if submitted:
+                try:
+                    st.session_state["user_id"] = verify_user(username, password)
+                    st.session_state["username"] = username.strip().lower()
+                except AuthError as exc:
+                    log_auth_event("sign-in-refused", username, reason=exc)
+                    st.error(str(exc), icon=":material/lock:")
+                else:
+                    log_auth_event("sign-in", username)
+                    st.rerun()
+
+        with register_tab:
+            with st.form("register", border=False):
+                new_username = st.text_input("Username", key="register_username")
+                new_password = st.text_input(
+                    "Password",
+                    type="password",
+                    key="register_password",
+                    help="At least 10 characters.",
+                )
+                confirm = st.text_input(
+                    "Confirm password", type="password", key="register_confirm"
+                )
+                created = st.form_submit_button("Create account", width="stretch")
+            if created:
+                if new_password != confirm:
+                    st.error("Passwords do not match.", icon=":material/error:")
+                else:
+                    try:
+                        st.session_state["user_id"] = create_user(
+                            new_username, new_password
+                        )
+                        st.session_state["username"] = new_username.strip().lower()
+                    except AuthError as exc:
+                        log_auth_event("register-refused", new_username, reason=exc)
+                        st.error(str(exc), icon=":material/error:")
+                    else:
+                        log_auth_event("register", new_username)
+                        st.rerun()
+
+    if user_count() == 0:
+        st.caption("No accounts yet. Create the first one to begin.")
+    st.caption(
+        "Passwords are stored as salted scrypt hashes, never in plain text. "
+        "Serve this app over HTTPS so they are not readable in transit."
+    )
+    st.stop()
+
+
+def _sign_out() -> None:
+    log_auth_event("sign-out", str(st.session_state.get("username", "")))
+    for key in ("user_id", "username"):
+        st.session_state.pop(key, None)
+    st.rerun()
+
+
+_sign_in_gate()
+
 with st.sidebar:
     brand()
+    account_badge(str(st.session_state.get("username", "")))
+    if st.button("Sign out", icon=":material/logout:", width="stretch"):
+        _sign_out()
 
 navigation = st.navigation(
     [

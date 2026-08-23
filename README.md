@@ -200,3 +200,5 @@ The confidence control changes the precision/recall tradeoff; a confidence perce
 must not be presented as overall model accuracy.
 
 See `docs/user_guide.md`, `docs/model_card.md`, and `docs/PRD.md` for further details.
+To run this in production, follow `docs/deployment.md` — it covers TLS, environment
+variables, logging, backups, and the pre-release checks.

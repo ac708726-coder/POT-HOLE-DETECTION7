@@ -1,29 +1,29 @@
 [theme]
-base = "light"
-primaryColor = "#B9301D"
-backgroundColor = "#F4F0E6"
-secondaryBackgroundColor = "#E7E0D2"
-textColor = "#12263F"
-linkColor = "#1646A0"
-borderColor = "#CBC2B2"
+base = "dark"
+primaryColor = "#FFCB1F"
+backgroundColor = "#0D141C"
+secondaryBackgroundColor = "#151F2A"
+textColor = "#EAF2F8"
+linkColor = "#45CDFF"
+borderColor = "#2D4052"
 showWidgetBorder = true
 baseRadius = "2px"
 buttonRadius = "2px"
-font = "'Manrope':https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
-headingFont = "'DM Serif Display':https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&display=swap"
-codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-headingFontWeights = [400, 400, 400, 400, 400, 400]
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "'IBM Plex Serif':https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;500;600&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+headingFontWeights = [600, 600, 600, 500, 500, 500]
 baseFontSize = 15
 linkUnderline = false
-chartCategoricalColors = ["#1646A0", "#E64D2E", "#C9F24B", "#12263F", "#7A8FA8"]
+chartCategoricalColors = ["#45CDFF", "#FFCB1F", "#FF6B42", "#4ADE9B", "#B48BFF"]
 showSidebarBorder = true
 
 [theme.sidebar]
-backgroundColor = "#0E223C"
-secondaryBackgroundColor = "#193451"
-textColor = "#FFFDF7"
-borderColor = "#29425F"
-primaryColor = "#E64D2E"
+backgroundColor = "#080E15"
+secondaryBackgroundColor = "#151F2A"
+textColor = "#EAF2F8"
+borderColor = "#233343"
+primaryColor = "#FFCB1F"
 
 [server]
 maxUploadSize = 200

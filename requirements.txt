@@ -1,12 +1,21 @@
-# NOTE: `pip install -r requirements.txt` installs a CPU-only torch on Windows.
-# For GPU training and FP16 inference, install torch from the CUDA index FIRST
-# (see the setup section in README.md), then install this file. Verify with:
+# Streamlit Community Cloud build.
+#
+# Two differences from a local install, both required by the platform:
+#  - torch comes from the CPU index. The default Linux wheel bundles CUDA and
+#    is several gigabytes, which blows the Community Cloud resource limit.
+#  - opencv is the headless build. The regular wheel links libGL, which is not
+#    installed on the runner. Nothing here opens a window, so headless is a
+#    strict improvement on a server.
+#
+# For local GPU training, install torch from the CUDA index first (see README),
+# then this file. Verify with:
 #   python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-# A "+cpu" version string means the GPU path is inactive.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 streamlit==1.62.0
 ultralytics==8.4.125
 torch==2.11.0
-opencv-python==4.14.0.94
+opencv-python-headless==4.14.0.94
 pillow==12.3.0
 numpy==2.5.2
 pandas==3.0.5
