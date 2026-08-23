@@ -15,6 +15,8 @@ from utils.detector import (
     inference_profile_details,
     warm_up_model,
 )
+from utils.observability import report_error
+from utils.session import require_user
 from utils.storage import create_detection_record
 from utils.ui import media_stamp, page_intro, scanning_banner, section_heading
 from utils.validators import (
@@ -23,6 +25,9 @@ from utils.validators import (
     validate_video_upload,
 )
 from utils.video_processor import VideoProcessingError, process_video
+
+# Streamlit can run this page without app.py, so the gate is asserted here.
+USER_ID = require_user()
 
 model_stat = MODEL_PATH.stat() if MODEL_PATH.is_file() else None
 model_ready = model_stat is not None and model_stat.st_size > 0
@@ -162,7 +167,8 @@ if process_clicked:
         OSError,
     ) as exc:
         progress.empty()
-        st.error(str(exc), icon=":material/error:")
+        reference = report_error("video detection failed", exc)
+        st.error(f"{exc} (reference {reference})", icon=":material/error:")
 
 saved = st.session_state.get("video_detection_result")
 if not saved or saved.get("key") != result_key:
@@ -199,6 +205,7 @@ with download_col:
 with save_col:
     if st.button("Save summary to history", icon=":material/save:", width="stretch"):
         record_id = create_detection_record(
+            user_id=USER_ID,
             input_type="video",
             input_name=uploaded_file.name,
             detection_count=details["unique_count_estimate"],

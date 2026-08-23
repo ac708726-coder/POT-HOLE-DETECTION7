@@ -21,6 +21,8 @@ from utils.detector import (
     warm_up_model,
 )
 from utils.image_processor import decode_image, encode_image, image_metadata
+from utils.observability import report_error
+from utils.session import require_user
 from utils.severity import estimate_apparent_severity, summarize_severity
 from utils.storage import create_detection_record
 from utils.ui import (
@@ -31,6 +33,9 @@ from utils.ui import (
     section_heading,
 )
 from utils.validators import ValidationError, validate_image_upload
+
+# Streamlit can run this page without app.py, so the gate is asserted here.
+USER_ID = require_user()
 
 model_stat = MODEL_PATH.stat() if MODEL_PATH.is_file() else None
 model_ready = model_stat is not None and model_stat.st_size > 0
@@ -156,7 +161,8 @@ if detect_clicked:
             icon=":material/check_circle:",
         )
     except (ModelNotFoundError, DetectorError, ValidationError) as exc:
-        st.error(str(exc), icon=":material/error:")
+        reference = report_error("image detection failed", exc)
+        st.error(f"{exc} (reference {reference})", icon=":material/error:")
 
 saved = st.session_state.get("image_detection_result")
 if not saved or saved.get("key") != result_key:
@@ -234,6 +240,7 @@ with download_col:
 with save_col:
     if st.button("Save summary to history", icon=":material/save:", width="stretch"):
         record_id = create_detection_record(
+            user_id=USER_ID,
             input_type="image",
             input_name=uploaded_file.name,
             detection_count=result["count"],

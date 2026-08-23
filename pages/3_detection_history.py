@@ -5,8 +5,13 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from utils.session import require_user
 from utils.storage import list_detection_records, records_to_csv
 from utils.ui import page_intro, section_heading
+
+# Streamlit can run this page without app.py, so the gate is asserted here.
+USER_ID = require_user()
+
 
 page_intro(
     "03",
@@ -15,7 +20,7 @@ page_intro(
     "Review saved summaries, compare inspection volume, and export the record when you need it.",
 )
 
-records = list_detection_records()
+records = list_detection_records(USER_ID)
 if not records:
     st.info(
         "No saved records yet. Run a detection and choose Save summary to history.",

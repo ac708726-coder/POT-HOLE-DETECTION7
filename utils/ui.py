@@ -92,6 +92,36 @@ def apply_app_style() -> None:
         }
         .sidebar-scope span { flex: 1; height: 1px; background: var(--line-soft); }
 
+        /* ------------------------------------------------------- sign-in */
+        .auth-head { max-width: 30rem; margin: 0 auto 1.6rem; text-align: left; }
+        .auth-mark {
+            width: 44px; height: 44px; margin-bottom: 1.4rem;
+            background: url('/app/static/divot-mark.svg') center / contain no-repeat;
+        }
+        .auth-head h1 {
+            margin: 0; color: var(--ink); font-family: var(--display);
+            font-size: clamp(1.9rem, 3vw, 2.5rem); font-weight: 600;
+            line-height: 1.1; letter-spacing: -.03em;
+        }
+        .auth-head p {
+            margin: .8rem 0 0; color: var(--ink-soft); font-size: .95rem; line-height: 1.6;
+        }
+        .st-key-auth_panel {
+            max-width: 30rem; margin: 0 auto; padding: 1.7rem;
+            border: 1px solid var(--line); border-radius: 2px; background: var(--panel);
+        }
+        .account-badge {
+            display: flex; align-items: center; gap: .5rem;
+            margin: .9rem 0 .2rem; padding: .5rem .6rem;
+            border: 1px solid var(--line-soft); border-radius: 2px; background: var(--panel);
+            font-family: var(--mono); font-size: .55rem; letter-spacing: .12em;
+            text-transform: uppercase; color: var(--ink-soft);
+        }
+        .account-badge__dot {
+            width: 5px; height: 5px; border-radius: 50%; background: var(--detect); flex: none;
+        }
+        .account-badge__name { color: var(--ink); }
+
         /* ------------------------------------------------- sidebar (base) */
         [data-testid="stSidebar"] {
             border-right: 1px solid var(--line-soft);
@@ -773,6 +803,29 @@ def sidebar_scene(height: int = 132) -> None:
     """Render the compact live scan strip shown in the sidebar."""
 
     components.html(_scene_markup(height, compact=True), height=height)
+
+
+def signin_shell(title: str, description: str) -> None:
+    """Render the header above the sign-in form."""
+
+    st.html(f"""
+        <div class="auth-head">
+          <div class="auth-mark"></div>
+          <h1>{html.escape(title)}</h1>
+          <p>{html.escape(description)}</p>
+        </div>
+        """)
+
+
+def account_badge(username: str) -> None:
+    """Show which account the sidebar belongs to."""
+
+    st.html(f"""
+        <div class="account-badge">
+          <span class="account-badge__dot"></span>
+          <span class="account-badge__name">{html.escape(username)}</span>
+        </div>
+        """)
 
 
 def brand() -> None:
