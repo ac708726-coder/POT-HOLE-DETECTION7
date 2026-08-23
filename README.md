@@ -145,9 +145,8 @@ Central settings live in `config.py`:
 
 Image inference includes three PyTorch modes: Fast uses one standard 640-pixel pass,
 Balanced uses test-time augmentation, and Thorough merges augmented 640- and 960-pixel
-passes. Overlapping boxes from multiple passes are clustered and fused into a
-confidence-weighted average box, which sharpens localization compared with discarding
-every non-maximal box. Video defaults to Fast mode to preserve throughput.
+passes. Overlapping boxes from multiple passes are merged with NMS. Video defaults to
+Fast mode to preserve throughput.
 CUDA laptops automatically use FP16 inference and four-frame video batching. Balanced
 video mode also batches, at half that size, because test-time augmentation multiplies
 activation memory per frame. CPU-only laptops stay on FP32 with batch size one, so the
@@ -181,17 +180,19 @@ decisions.
 The selected checkpoint was evaluated once on the untouched 3,925-image multinational
 held-out split containing 660 pothole boxes.
 
-| Metric | Result | Previous checkpoint |
-|---|---:|---:|
-| Precision | 0.5300 | 0.4820 |
-| Recall | 0.4212 | 0.4015 |
-| mAP@0.50 | 0.4260 | 0.4011 |
-| mAP@0.50–0.95 | 0.1960 | 0.1769 |
-| GPU inference time | 5.7 ms/image | 5.5 ms/image |
+| Metric | Installed | 60-epoch stage | Earlier checkpoint |
+|---|---:|---:|---:|
+| Precision | **0.5520** | 0.5300 | 0.4820 |
+| Recall | 0.4136 | 0.4212 | 0.4015 |
+| mAP@0.50 | **0.4334** | 0.4260 | 0.4011 |
+| mAP@0.50–0.95 | **0.1992** | 0.1960 | 0.1769 |
+| GPU inference time | 5.7 ms/image | 5.7 ms/image | 5.5 ms/image |
 
-Both columns come from the same script and the same split, evaluated on the same day, so
-they are directly comparable. The improvement came from training length alone — the
-previous checkpoint's learning-rate schedule ended while the model was still improving.
+All columns come from the same script and the same split, evaluated on the same day, so
+they are directly comparable. Two changes produced the gain: training length (the earlier
+checkpoint's schedule ended while the model was still improving), then a low-rate AdamW
+refinement stage on top. Recall is the one metric the refinement stage did not improve —
+it traded a little recall for more precision.
 
 These results do not meet the aspirational PRD targets. Improving them requires more
 training and data balancing/curation; they must not be presented as production accuracy.

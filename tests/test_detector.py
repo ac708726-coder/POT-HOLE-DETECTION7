@@ -92,7 +92,14 @@ def test_multi_pass_merge_removes_overlapping_duplicate() -> None:
     assert [item["confidence"] for item in merged] == [0.9, 0.7]
 
 
-def test_merge_fuses_cluster_into_confidence_weighted_box() -> None:
+def test_merge_keeps_winning_box_coordinates_untouched() -> None:
+    """Merging drops the weaker overlap and leaves the winner's box exactly as it was.
+
+    Averaging the cluster (Weighted Boxes Fusion) was measured and came out slightly
+    worse; see scripts/compare_box_merging.py. This pins the shipped behaviour so a
+    future fusion attempt has to update the test deliberately.
+    """
+
     detections = [
         {"class_id": 0, "confidence": 0.75, "box": [0.0, 0.0, 10.0, 10.0]},
         {"class_id": 0, "confidence": 0.25, "box": [2.0, 0.0, 12.0, 10.0]},
@@ -101,8 +108,7 @@ def test_merge_fuses_cluster_into_confidence_weighted_box() -> None:
 
     assert len(merged) == 1
     assert merged[0]["confidence"] == pytest.approx(0.75)
-    assert merged[0]["box"][0] == pytest.approx(0.5)
-    assert merged[0]["box"][2] == pytest.approx(10.5)
+    assert merged[0]["box"] == [0.0, 0.0, 10.0, 10.0]
 
 
 def test_merge_keeps_distinct_classes_separate() -> None:

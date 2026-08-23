@@ -250,47 +250,27 @@ def _box_iou(first: list[float], second: list[float]) -> float:
 def _merge_detections(
     detections: list[dict[str, Any]], iou_threshold: float
 ) -> list[dict[str, Any]]:
-    """Merge duplicate detections from multiple inference passes.
+    """Merge duplicate detections from multiple inference passes with NMS.
 
-    Clusters overlapping same-class boxes (NMS-style) and fuses each cluster into a
-    single confidence-weighted box average (Weighted Boxes Fusion) rather than
-    discarding every non-maximal box outright. This keeps the reported confidence of
-    the best pass while sharpening localization by averaging in the other passes'
-    agreeing boxes, which improves box accuracy when merging multi-scale/augmented
-    inference passes ("balanced"/"thorough" profiles).
+    Weighted Boxes Fusion was tried here — clustering overlapping same-class boxes and
+    replacing each cluster with a confidence-weighted average instead of dropping the
+    non-maximal boxes. Measured over the full 3,925-image test split on the thorough
+    profile it was slightly worse, not better: mAP50 0.2348 -> 0.2327 and mAP50-95
+    0.1120 -> 0.1115, with an identical detection count because fusion only moves box
+    coordinates. See outputs/metrics/wbf_vs_nms_thorough.json. Plain NMS stays.
     """
 
     ordered = sorted(detections, key=lambda item: item["confidence"], reverse=True)
     kept: list[dict[str, Any]] = []
-    clusters: list[list[dict[str, Any]]] = []
     for candidate in ordered:
-        match_index = next(
-            (
-                index
-                for index, existing in enumerate(kept)
-                if candidate["class_id"] == existing["class_id"]
-                and _box_iou(candidate["box"], existing["box"]) >= iou_threshold
-            ),
-            None,
+        duplicate = any(
+            candidate["class_id"] == existing["class_id"]
+            and _box_iou(candidate["box"], existing["box"]) >= iou_threshold
+            for existing in kept
         )
-        if match_index is None:
+        if not duplicate:
             kept.append(candidate)
-            clusters.append([candidate])
-        else:
-            clusters[match_index].append(candidate)
-
-    fused: list[dict[str, Any]] = []
-    for representative, cluster in zip(kept, clusters):
-        total_weight = sum(member["confidence"] for member in cluster)
-        fused_box = [
-            sum(member["box"][index] * member["confidence"] for member in cluster)
-            / total_weight
-            for index in range(4)
-        ]
-        merged = dict(representative)
-        merged["box"] = fused_box
-        fused.append(merged)
-    return fused
+    return kept
 
 
 def inference_profile_details(profile: str) -> dict[str, Any]:
