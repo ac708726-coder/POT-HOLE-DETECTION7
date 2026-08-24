@@ -178,24 +178,25 @@ the torch pin, change the torchvision pin to the matching release.
 requires it, and an unpinned transitive dependency is exactly what pulls the
 CUDA wheel back in.
 
-`packages.txt` installs `libgl1`, which OpenCV links against and the runner
-image does not carry. The headless OpenCV build would avoid it, but
-`ultralytics` depends on `opencv-python` by name and pulls the GUI build in
-regardless, so the apt package is the reliable fix.
+`packages.txt` installs `libglib2.0-0t64`, which supplies the
+`libgthread-2.0.so.0` that OpenCV links against and the runner image does not
+carry. The `t64` suffix matters: the runner is on Debian trixie, where the
+64-bit `time_t` transition renamed the package. Asking for the old
+`libglib2.0-0` makes apt select the Debian 11 build, which depends on
+`libffi7` and `libpcre3` — neither exists on trixie — and the whole apt step
+fails, which now aborts the deploy with "Error installing requirements".
 
-`libglib2.0-0` is there because OpenCV also links `libgthread-2.0.so.0`, and
-glib is not on the image either. Adding `opencv-python-headless` does not avoid
-this: pip resolves both OpenCV builds, installs the GUI one second, and it
-overwrites the same `cv2` directory, so the headless wheel is downloaded and
-then buried.
+`libgl1` is not listed: apt reports it as already the newest version on this
+image, so OpenCV's other link-time dependency is satisfied out of the box.
+
+Adding `opencv-python-headless` is not a way around any of this. pip resolves
+both OpenCV builds, installs the GUI one second, and it overwrites the same
+`cv2` directory, so the headless wheel is downloaded and then buried.
+`ultralytics` requires `opencv-python` by name, so the system library is what
+has to be supplied.
 
 Keep that file to bare package names, one per line, with no comments — every
 line is passed to `apt-get install` as a package name.
-
-If the apt step fails on `libglib2.0-0` with unmet `libffi7` or `libpcre3`
-dependencies, the runner is on a newer Debian where the package was renamed:
-use `libglib2.0-0t64` instead. The symptom to match it against is a scan
-failing with `libgthread-2.0.so.0: cannot open shared object file`.
 
 ### Expectations on the free tier
 
