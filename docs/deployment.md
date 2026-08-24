@@ -165,10 +165,23 @@ treats the account as permanent.
 
 ### What this branch changes for the platform
 
-`requirements.txt` pins the CPU torch index and the headless OpenCV build.
-Without both, the build either exceeds the resource limit or fails at import on
-a missing `libGL`. If the build still reports a missing shared library, add a
-`packages.txt` at the repository root naming the apt package.
+`requirements.txt` pins `torch` and `torchvision` to their `+cpu` local
+versions, which exist only on the PyTorch CPU index. The plain version numbers
+also resolve on PyPI, where the wheels bundle CUDA and run to several
+gigabytes — past the Community Cloud limit. The install then fails partway and
+`ultralytics`, later in the file, never installs. The app still starts, because
+only the detector imports it, so the symptom appears at scan time as
+"Ultralytics is not installed" rather than as a startup crash. If you change
+the torch pin, change the torchvision pin to the matching release.
+
+`torchvision` is listed even though no module here imports it: `ultralytics`
+requires it, and an unpinned transitive dependency is exactly what pulls the
+CUDA wheel back in.
+
+`packages.txt` installs `libgl1` and `libglib2.0-0`, which OpenCV links
+against and the runner does not carry. The headless OpenCV build would avoid
+them, but `ultralytics` depends on `opencv-python` by name and pulls the GUI
+build in regardless, so the apt packages are the reliable fix.
 
 ### Expectations on the free tier
 

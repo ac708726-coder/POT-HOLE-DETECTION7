@@ -1,21 +1,27 @@
 # Streamlit Community Cloud build.
 #
-# Two differences from a local install, both required by the platform:
-#  - torch comes from the CPU index. The default Linux wheel bundles CUDA and
-#    is several gigabytes, which blows the Community Cloud resource limit.
-#  - opencv is the headless build. The regular wheel links libGL, which is not
-#    installed on the runner. Nothing here opens a window, so headless is a
-#    strict improvement on a server.
+# torch and torchvision are pinned to the "+cpu" local versions, which only
+# exist on the PyTorch CPU index. Without the suffix pip is free to take the
+# PyPI wheels, which bundle CUDA and run to several gigabytes -- far past the
+# Community Cloud resource limit. The install then dies partway and ultralytics
+# never lands, which surfaces in the app as "Ultralytics is not installed".
 #
-# For local GPU training, install torch from the CUDA index first (see README),
-# then this file. Verify with:
+# torchvision is here because ultralytics requires it. It is not imported
+# directly by this project, so it is easy to leave out by accident.
+#
+# For local GPU training, install torch and torchvision from the CUDA index
+# first (see README), then run this file with --no-deps for the rest. Verify:
 #   python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 streamlit==1.62.0
 ultralytics==8.4.125
-torch==2.11.0
-opencv-python-headless==4.14.0.94
+torch==2.11.0+cpu
+torchvision==0.26.0+cpu
+# ultralytics depends on opencv-python, not the headless build, so pinning
+# headless here does not stop the GUI build being pulled in anyway. Keep the
+# normal wheel and give the runner libGL through packages.txt.
+opencv-python==4.14.0.94
 pillow==12.3.0
 numpy==2.5.2
 pandas==3.0.5
