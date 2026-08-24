@@ -183,12 +183,19 @@ image does not carry. The headless OpenCV build would avoid it, but
 `ultralytics` depends on `opencv-python` by name and pulls the GUI build in
 regardless, so the apt package is the reliable fix.
 
-Keep that file to bare package names, one per line, with no comments: every
-line is passed to `apt-get install` as a package name. And do not add
-`libglib2.0-0` — glib is already present on the runner, and asking for it by
-name fails the whole apt step, because on this Debian release the package was
-renamed `libglib2.0-0t64` and the old name depends on `libpcre3`, which no
-longer exists. A failed apt step aborts the build before pip ever runs.
+`libglib2.0-0` is there because OpenCV also links `libgthread-2.0.so.0`, and
+glib is not on the image either. Adding `opencv-python-headless` does not avoid
+this: pip resolves both OpenCV builds, installs the GUI one second, and it
+overwrites the same `cv2` directory, so the headless wheel is downloaded and
+then buried.
+
+Keep that file to bare package names, one per line, with no comments — every
+line is passed to `apt-get install` as a package name.
+
+If the apt step fails on `libglib2.0-0` with unmet `libffi7` or `libpcre3`
+dependencies, the runner is on a newer Debian where the package was renamed:
+use `libglib2.0-0t64` instead. The symptom to match it against is a scan
+failing with `libgthread-2.0.so.0: cannot open shared object file`.
 
 ### Expectations on the free tier
 
