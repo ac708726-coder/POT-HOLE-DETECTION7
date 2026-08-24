@@ -186,8 +186,11 @@ carry. The `t64` suffix matters: the runner is on Debian trixie, where the
 `libffi7` and `libpcre3` — neither exists on trixie — and the whole apt step
 fails, which now aborts the deploy with "Error installing requirements".
 
-`libgl1` is not listed: apt reports it as already the newest version on this
-image, so OpenCV's other link-time dependency is satisfied out of the box.
+`libgl1` supplies OpenCV's other link-time dependency, `libGL.so.1`. Do not
+drop it on the strength of apt reporting it as "already the newest version":
+that only means an earlier build on the same container had installed it. A
+container built from scratch does not have it, and the scan then fails with
+`libGL.so.1: cannot open shared object file`.
 
 Adding `opencv-python-headless` is not a way around any of this. pip resolves
 both OpenCV builds, installs the GUI one second, and it overwrites the same
