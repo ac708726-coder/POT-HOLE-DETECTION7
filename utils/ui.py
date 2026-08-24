@@ -5,10 +5,11 @@ from __future__ import annotations
 import html
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 # Streamlit sanitises st.html and removes <script>, so anything that needs real
-# JavaScript has to go through components.html, which renders in an iframe.
+# JavaScript has to go through st.iframe, which renders in an iframe. Passing
+# markup rather than a URL is supported: a src that matches no URL pattern is
+# embedded as raw HTML.
 _SCENE_COLORS = {
     "ground": "#080e15",
     "dot": "#3c5266",
@@ -796,13 +797,13 @@ def _scene_markup(height: int, compact: bool = False) -> str:
 def scan_scene(height: int = 545) -> None:
     """Render the interactive road point-cloud used as the home hero visual."""
 
-    components.html(_scene_markup(height), height=height)
+    st.iframe(_scene_markup(height), height=height)
 
 
 def sidebar_scene(height: int = 132) -> None:
     """Render the compact live scan strip shown in the sidebar."""
 
-    components.html(_scene_markup(height, compact=True), height=height)
+    st.iframe(_scene_markup(height, compact=True), height=height)
 
 
 def signin_shell(title: str, description: str) -> None:
