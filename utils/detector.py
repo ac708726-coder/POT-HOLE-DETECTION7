@@ -104,9 +104,18 @@ def _load_model_cached(
     try:
         from ultralytics import YOLO
     except ImportError as exc:
-        raise DetectorError(
-            "Ultralytics is not installed. Install the packages from requirements.txt."
-        ) from exc
+        # Ultralytics pulls in torch, torchvision and cv2, so a missing shared
+        # library or a mismatched wheel lands here as an ImportError as well.
+        # Blaming a missing package for all of them sends people off to install
+        # something that is already present, so separate the two cases and pass
+        # the loader's own message through either way.
+        from importlib.util import find_spec
+
+        if find_spec("ultralytics") is None:
+            detail = "Ultralytics is not installed. Install the packages from requirements.txt."
+        else:
+            detail = "Ultralytics is installed but failed to import."
+        raise DetectorError(f"{detail} ({exc})") from exc
 
     try:
         model = YOLO(str(path))
