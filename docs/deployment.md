@@ -178,10 +178,17 @@ the torch pin, change the torchvision pin to the matching release.
 requires it, and an unpinned transitive dependency is exactly what pulls the
 CUDA wheel back in.
 
-`packages.txt` installs `libgl1` and `libglib2.0-0`, which OpenCV links
-against and the runner does not carry. The headless OpenCV build would avoid
-them, but `ultralytics` depends on `opencv-python` by name and pulls the GUI
-build in regardless, so the apt packages are the reliable fix.
+`packages.txt` installs `libgl1`, which OpenCV links against and the runner
+image does not carry. The headless OpenCV build would avoid it, but
+`ultralytics` depends on `opencv-python` by name and pulls the GUI build in
+regardless, so the apt package is the reliable fix.
+
+Keep that file to bare package names, one per line, with no comments: every
+line is passed to `apt-get install` as a package name. And do not add
+`libglib2.0-0` — glib is already present on the runner, and asking for it by
+name fails the whole apt step, because on this Debian release the package was
+renamed `libglib2.0-0t64` and the old name depends on `libpcre3`, which no
+longer exists. A failed apt step aborts the build before pip ever runs.
 
 ### Expectations on the free tier
 
