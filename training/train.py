@@ -22,12 +22,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data", type=Path, default=PROJECT_ROOT / "data" / "potholes.yaml"
     )
-    parser.add_argument("--epochs", type=int, default=25)
-    parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--epochs", type=int, default=60)
+    parser.add_argument("--imgsz", type=int, default=960)
     parser.add_argument(
         "--batch",
         type=int,
-        default=16,
+        default=8,
         help=(
             "Images per batch. Use -1 for Ultralytics AutoBatch, which sizes the "
             "batch to roughly 60%% of free VRAM; recommended when raising --imgsz "
@@ -128,6 +128,19 @@ def main() -> None:
         "seed": 42,
         "deterministic": True,
         "multi_scale": args.multi_scale,
+        "patience": 15,
+        "save_period": 5,
+        "mosaic": 0.5,
+        "close_mosaic": min(10, args.epochs),
+        "scale": 0.4,
+        "perspective": 0.0002,
+        "degrees": 5.0,
+        "translate": 0.1,
+        "hsv_h": 0.015,
+        "hsv_s": 0.5,
+        "hsv_v": 0.35,
+        "fliplr": 0.5,
+        "amp": True,
     }
     if args.accuracy_preset:
         options.update(

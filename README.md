@@ -69,6 +69,13 @@ not trained for the required pothole class.
 
 ## RDD2022 dataset and preparation
 
+For the next mixed-source model targeting phone close-ups, top-down views and small
+potholes, see [the retraining plan](training/README.md) and `training/data.yaml`.
+Training is manual. Thorough inference's highest input resolution is the tunable
+`THOROUGH_IMAGE_SIZE` constant in `config.py` (1280 by default); expect higher
+runtime/memory use on CPU than Fast/Balanced. This change is not a measured accuracy
+gain and cannot guarantee recovery of the reported misses.
+
 Use the public RDD2022 Road Damage Dataset. Start with the India subset from the
 [official repository](https://github.com/sekilab/RoadDamageDetector#dataset), or use the
 [official Figshare record](https://doi.org/10.6084/m9.figshare.21431547). Extract it so
