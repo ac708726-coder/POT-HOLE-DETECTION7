@@ -12,7 +12,7 @@ from config import (
     MIN_SCAN_CONFIDENCE,
     MODEL_PATH,
 )
-from utils.detection_details import no_detection_hint
+from utils.detection_details import detection_rows, no_detection_hint
 from utils.detector import (
     DetectorError,
     ModelNotFoundError,
@@ -211,6 +211,9 @@ scan_metrics(
         ("Mode", selected_profile["label"]),
     ]
 )
+st.caption(
+    f"Average confidence {average_confidence:.1%} · Max confidence {max(confidences, default=0.0):.1%}"
+)
 
 if result["count"] == 0:
     st.warning(
@@ -222,21 +225,22 @@ else:
         "Detection completed. Review every box before using the result.",
         icon=":material/task_alt:",
     )
-    rows = [
-        {
-            "Detection": index,
-            "Confidence": round(detection["confidence"], 3),
-            "Apparent severity": estimate_apparent_severity(
-                detection["box"], original_image.size
-            ),
-        }
-        for index, detection in enumerate(result["detections"], start=1)
-    ]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-    st.caption(
-        "Apparent severity uses relative box area only. It does not measure depth or "
-        "real-world dimensions."
-    )
+    rows = detection_rows(result["detections"], original_image.size)
+    for row, detection in zip(rows, result["detections"]):
+        row["Apparent severity"] = estimate_apparent_severity(
+            detection["box"], original_image.size
+        )
+    with st.expander(f"Detection details ({len(rows)})"):
+        st.dataframe(
+            pd.DataFrame(rows),
+            hide_index=True,
+            width="stretch",
+            column_config={"Confidence": st.column_config.NumberColumn(format="%.3f")},
+        )
+        st.caption(
+            "Box sizes use original-image pixels. Apparent severity uses relative box area only. "
+            "It does not measure depth or real-world dimensions."
+        )
 
 annotated_bytes = encode_image(result["annotated_image"], "JPEG")
 download_col, save_col = st.columns(2)
