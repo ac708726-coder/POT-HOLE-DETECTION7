@@ -61,7 +61,7 @@ Run locally or in CI (`.github/workflows/ci.yml` runs all three on every push
 and pull request):
 
 ```bash
-ruff check . && black --check . && pytest -q
+ruff check . && black --check . && python -m pytest -q
 ```
 
 Then, on a staging instance with production settings:

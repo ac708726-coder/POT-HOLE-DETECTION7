@@ -29,4 +29,5 @@ jobs:
         run: black --check .
 
       - name: Tests
-        run: pytest -q
+        # Module invocation includes the repository root on sys.path.
+        run: python -m pytest -q
