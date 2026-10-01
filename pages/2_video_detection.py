@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import streamlit as st
 
-from config import DEFAULT_CONFIDENCE, MAX_VIDEO_SIZE_MB, MIN_SCAN_CONFIDENCE, MODEL_PATH
+from config import (
+    DEFAULT_CONFIDENCE,
+    MAX_VIDEO_SIZE_MB,
+    MIN_SCAN_CONFIDENCE,
+    MODEL_PATH,
+)
 from utils.detector import (
     DetectorError,
     ModelNotFoundError,
@@ -16,6 +20,7 @@ from utils.detector import (
     warm_up_model,
 )
 from utils.observability import report_error
+from utils.scan_state import scan_key, store_scan_result, sync_scan_inputs
 from utils.session import require_user
 from utils.storage import create_detection_record
 from utils.ui import media_stamp, page_intro, scanning_banner, section_heading
@@ -50,6 +55,7 @@ with st.container(border=True):
     )
 
 if uploaded_file is None:
+    sync_scan_inputs(st.session_state, "video_detection", None)
     st.caption(
         "MP4, MOV, or AVI up to 200 MB and five minutes. Video is not added to history automatically."
     )
@@ -75,7 +81,7 @@ section_heading(
 preview_col, controls_col = st.columns([1.18, 0.82], vertical_alignment="top")
 with preview_col:
     st.video(video_bytes)
-with controls_col, st.form("video_scan_controls", border=True):
+with controls_col, st.container(key="video_scan_controls", border=True):
     mode = st.segmented_control(
         "Processing mode",
         options=["fast", "balanced"],
@@ -102,7 +108,7 @@ with controls_col, st.form("video_scan_controls", border=True):
         help="Analyzing fewer frames improves speed but can miss brief appearances.",
         width="stretch",
     )
-    process_clicked = st.form_submit_button(
+    process_clicked = st.button(
         "Run route scan",
         type="primary",
         icon=":material/play_arrow:",
@@ -111,11 +117,15 @@ with controls_col, st.form("video_scan_controls", border=True):
         key="primary_action",
     )
 
-fingerprint = hashlib.sha256(video_bytes).hexdigest()
 model_signature = (
     f"{model_stat.st_mtime_ns}:{model_stat.st_size}" if model_stat else "missing"
 )
-result_key = f"{fingerprint}:{confidence:.2f}:{frame_skip}:{mode}:{model_signature}"
+result_key = scan_key(video_bytes, str(mode), confidence, int(frame_skip))
+settings_changed = sync_scan_inputs(
+    st.session_state, "video_detection", result_key, model_signature
+)
+if settings_changed and not process_clicked:
+    st.info("Settings changed — rescan.", icon=":material/refresh:")
 
 if not model_ready:
     st.warning(
@@ -151,12 +161,16 @@ if process_clicked:
                 ),
             )
             processed_bytes = output_path.read_bytes()
-        st.session_state["video_detection_result"] = {
-            "key": result_key,
-            "filename": uploaded_file.name,
-            "details": details,
-            "video_bytes": processed_bytes,
-        }
+        store_scan_result(
+            st.session_state,
+            "video_detection",
+            result_key,
+            {
+                "filename": uploaded_file.name,
+                "details": details,
+                "video_bytes": processed_bytes,
+            },
+        )
         progress.empty()
         st.toast("Video processing complete.", icon=":material/check_circle:")
     except (
@@ -170,8 +184,8 @@ if process_clicked:
         reference = report_error("video detection failed", exc)
         st.error(f"{exc} (reference {reference})", icon=":material/error:")
 
-saved = st.session_state.get("video_detection_result")
-if not saved or saved.get("key") != result_key:
+saved = st.session_state.get("video_detection_results", {}).get(result_key)
+if not saved:
     st.stop()
 
 details = saved["details"]

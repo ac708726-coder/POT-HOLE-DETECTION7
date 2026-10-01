@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-
 import pandas as pd
 import streamlit as st
 
@@ -23,6 +21,7 @@ from utils.detector import (
 )
 from utils.image_processor import decode_image, encode_image, image_metadata
 from utils.observability import report_error
+from utils.scan_state import scan_key, store_scan_result, sync_scan_inputs
 from utils.session import require_user
 from utils.severity import estimate_apparent_severity, summarize_severity
 from utils.storage import create_detection_record
@@ -59,6 +58,7 @@ with st.container(border=True):
     )
 
 if uploaded_file is None:
+    sync_scan_inputs(st.session_state, "image_detection", None)
     st.caption(
         "JPG, JPEG, or PNG. Your upload is processed for this session and is not added to history automatically."
     )
@@ -86,7 +86,7 @@ section_heading(
 preview_col, controls_col = st.columns([1.18, 0.82], vertical_alignment="top")
 with preview_col:
     st.image(original_image, caption="Source frame", width="stretch")
-with controls_col, st.form("image_scan_controls", border=True):
+with controls_col, st.container(key="image_scan_controls", border=True):
     mode = st.segmented_control(
         "Scan mode",
         options=["fast", "balanced", "thorough"],
@@ -109,7 +109,7 @@ with controls_col, st.form("image_scan_controls", border=True):
     st.caption(
         "Lower confidence finds more candidates; higher confidence is more selective."
     )
-    detect_clicked = st.form_submit_button(
+    detect_clicked = st.button(
         "Run surface scan",
         type="primary",
         icon=":material/radar:",
@@ -118,11 +118,15 @@ with controls_col, st.form("image_scan_controls", border=True):
         key="primary_action",
     )
 
-fingerprint = hashlib.sha256(file_bytes).hexdigest()
 model_signature = (
     f"{model_stat.st_mtime_ns}:{model_stat.st_size}" if model_stat else "missing"
 )
-result_key = f"{fingerprint}:{confidence:.2f}:{mode}:{model_signature}"
+result_key = scan_key(file_bytes, str(mode), confidence)
+settings_changed = sync_scan_inputs(
+    st.session_state, "image_detection", result_key, model_signature
+)
+if settings_changed and not detect_clicked:
+    st.info("Settings changed — rescan.", icon=":material/refresh:")
 
 if not model_ready:
     st.warning(
@@ -150,12 +154,16 @@ if detect_clicked:
                 inference_profile=str(mode),
             )
             status.update(label="Road scan complete", state="complete", expanded=False)
-        st.session_state["image_detection_result"] = {
-            "key": result_key,
-            "filename": uploaded_file.name,
-            "result": result,
-            "image_size": original_image.size,
-        }
+        store_scan_result(
+            st.session_state,
+            "image_detection",
+            result_key,
+            {
+                "filename": uploaded_file.name,
+                "result": result,
+                "image_size": original_image.size,
+            },
+        )
         plural = "s" if result["count"] != 1 else ""
         st.toast(
             f"Found {result['count']} pothole candidate{plural}.",
@@ -165,8 +173,8 @@ if detect_clicked:
         reference = report_error("image detection failed", exc)
         st.error(f"{exc} (reference {reference})", icon=":material/error:")
 
-saved = st.session_state.get("image_detection_result")
-if not saved or saved.get("key") != result_key:
+saved = st.session_state.get("image_detection_results", {}).get(result_key)
+if not saved:
     st.stop()
 
 result = saved["result"]
