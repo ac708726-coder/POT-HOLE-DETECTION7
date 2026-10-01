@@ -10,7 +10,12 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from config import DEFAULT_CONFIDENCE, DEFAULT_IOU_THRESHOLD, MODEL_PATH
+from config import (
+    DEFAULT_CONFIDENCE,
+    DEFAULT_IOU_THRESHOLD,
+    MODEL_PATH,
+    THOROUGH_IMAGE_SIZE,
+)
 from utils.image_processor import annotate_image
 from utils.validators import ValidationError, validate_confidence
 
@@ -36,10 +41,10 @@ INFERENCE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "thorough": {
         "label": "Thorough",
-        "description": "Two augmented scales, merged to reduce duplicate boxes.",
+        "description": f"Two augmented scales up to {THOROUGH_IMAGE_SIZE} px for small or distant damage.",
         "passes": (
             {"imgsz": 640, "augment": True},
-            {"imgsz": 960, "augment": True},
+            {"imgsz": THOROUGH_IMAGE_SIZE, "augment": True},
         ),
     },
 }
