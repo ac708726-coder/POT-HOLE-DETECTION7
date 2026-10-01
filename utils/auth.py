@@ -51,6 +51,12 @@ CREATE TABLE IF NOT EXISTS users (
     locked_until TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS login_sessions (
+    session_id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    credential_hash TEXT NOT NULL
+);
 """
 
 
@@ -266,3 +272,42 @@ def user_count(db_path: str | Path = DATABASE_PATH) -> int:
     initialize_users(db_path)
     with _connect(db_path) as connection:
         return int(connection.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+
+
+def register_login_session(claims: dict, db_path: str | Path = DATABASE_PATH) -> None:
+    """Register a token for revocation and invalidate it after password changes."""
+    initialize_users(db_path)
+    with _connect(db_path) as connection:
+        connection.execute(
+            "DELETE FROM login_sessions WHERE expires_at <= ?",
+            (int(_now().timestamp()),),
+        )
+        row = connection.execute(
+            "SELECT password_hash FROM users WHERE id = ?", (claims["uid"],)
+        ).fetchone()
+        if row is None:
+            raise AuthError("Account not found.")
+        connection.execute(
+            "INSERT INTO login_sessions VALUES (?, ?, ?, ?)",
+            (claims["sid"], claims["uid"], claims["exp"], row["password_hash"]),
+        )
+
+
+def login_session_user(claims: dict, db_path: str | Path = DATABASE_PATH) -> str | None:
+    initialize_users(db_path)
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT users.username FROM login_sessions JOIN users "
+            "ON users.id = login_sessions.user_id WHERE session_id = ? "
+            "AND users.id = ? AND expires_at = ? AND credential_hash = users.password_hash",
+            (claims["sid"], claims["uid"], claims["exp"]),
+        ).fetchone()
+    return str(row["username"]) if row else None
+
+
+def revoke_login_session(session_id: str, db_path: str | Path = DATABASE_PATH) -> None:
+    initialize_users(db_path)
+    with _connect(db_path) as connection:
+        connection.execute(
+            "DELETE FROM login_sessions WHERE session_id = ?", (session_id,)
+        )

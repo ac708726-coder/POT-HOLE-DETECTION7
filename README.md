@@ -11,10 +11,15 @@ TensorFlow, Keras, and ONNX Runtime are not used.
 
 The application, utilities, RDD2022 data pipeline, tests, documentation, and trained
 checkpoint are implemented. `models/best.pt` is a YOLO11s checkpoint fine-tuned on the
-seven RDD2022 country subsets for 25 base epochs plus an 8-epoch low-rate refinement
+seven RDD2022 country subsets for 60 base epochs plus a 5-epoch low-rate refinement
 stage, trained with PyTorch 2.11.0 on CUDA 13.0 and an RTX 4060 Laptop GPU. It improves
 geographic coverage and strict localization, but it is not a production-quality
 road-safety model.
+
+The 2026-10-01 hard-example fine-tuning candidate was rejected after a worse
+full-validation result. The application retains the original checkpoint; see
+`docs/hard_example_training_2026-10-01.md`. The colour-input correction improves
+the inference path without changing those weights.
 
 Run every command below through the project virtual environment at `.venv`, which is
 where the pinned CUDA build of PyTorch lives. A bare `python` on PATH may resolve to a
@@ -35,6 +40,24 @@ streamlit run app.py
 Open the local address printed by Streamlit. The app uses native Streamlit navigation
 for Image detection, Video detection, and Detection history.
 
+## Persistent sign-in
+
+Set `DIVOT_COOKIE_SIGNING_KEY` to a random secret of at least 32 bytes in Streamlit
+Cloud's **App settings → Secrets**, or in the environment. For local development,
+the same top-level setting can go in `.streamlit/secrets.toml` (gitignored).
+Generate a value locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+Never commit the generated value. Without a valid key, login works for the current
+session only. Use the same stable key across restarts; rotating it signs everyone out.
+
+Sign-in uses an HMAC-SHA256 signed cookie expiring after seven days. The cookie has
+path `/`, SameSite=Lax and Secure on HTTPS. Server checks include account existence,
+expiry, password changes, and revocation on Sign out. Password hashing stays scrypt.
+The [cookie controller](https://github.com/NathanChen198/streamlit-cookies-controller)
+writes browser cookies from JavaScript, so the cookie cannot be HttpOnly; do not
+inject untrusted JavaScript into this app. Tokens are signed, not encrypted, and
+contain an account id and random session id, never passwords. The account/session
+store is the existing SQLite database: losing that database invalidates the cookies.
+
 ## Model placement
 
 The trained single-class checkpoint is already stored at `models/best.pt`, where class
@@ -50,6 +73,13 @@ The project does not silently download generic weights because a general YOLO mo
 not trained for the required pothole class.
 
 ## RDD2022 dataset and preparation
+
+For the next mixed-source model targeting phone close-ups, top-down views and small
+potholes, see [the retraining plan](training/README.md) and `training/data.yaml`.
+Training is manual. Thorough inference's highest input resolution is the tunable
+`THOROUGH_IMAGE_SIZE` constant in `config.py` (1280 by default); expect higher
+runtime/memory use on CPU than Fast/Balanced. This change is not a measured accuracy
+gain and cannot guarantee recovery of the reported misses.
 
 Use the public RDD2022 Road Damage Dataset. Start with the India subset from the
 [official repository](https://github.com/sekilab/RoadDamageDetector#dataset), or use the
@@ -140,11 +170,11 @@ Central settings live in `config.py`:
 - Image types: JPG, JPEG, PNG; maximum 10 MB.
 - Video types: MP4, MOV, AVI; maximum 200 MB and five minutes.
 - Default confidence: 0.35, a selective starting point that can be lowered when recall matters more.
-- Default IoU threshold: 0.45.
+- Default IoU threshold: 0.50 (class-agnostic NMS).
 - Database: `database/potholes.db`, created only when history is used.
 
 Image inference includes three PyTorch modes: Fast uses one standard 640-pixel pass,
-Balanced uses test-time augmentation, and Thorough merges augmented 640- and 960-pixel
+Balanced uses test-time augmentation, and Thorough merges augmented 640- and 1280-pixel
 passes. Overlapping boxes from multiple passes are merged with NMS. Video defaults to
 Fast mode to preserve throughput.
 CUDA laptops automatically use FP16 inference and four-frame video batching. Balanced
@@ -166,6 +196,26 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 
 A `+cpu` version string or `False` means inference runs on CPU regardless of the
 available hardware.
+
+### Verify detection changes with real labelled images
+
+Pillow/UI images and this application's NumPy inputs are RGB. Before calling YOLO,
+`image_to_bgr()` creates a contiguous BGR NumPy buffer, as required by
+[Ultralytics' input contract](https://docs.ultralytics.com/modes/predict/#inference-sources).
+This applies to single images, batched video frames, and failure-case evaluation.
+Changing colour order does not retrain or replace `models/best.pt`.
+
+```powershell
+python scripts/benchmark_detection_recall.py --positives 100 --negatives 900 --seed 99 --output outputs/metrics/color_fix_confirmation.json
+```
+
+The benchmark uses the existing **validation** split, keeps negative road images,
+and compares the legacy colour bug with the corrected application path using the
+same weights, images, confidence and matching IoU. It writes per-image predictions,
+precision/recall at 0.15/0.25/0.35, and illustrative recovery images. These are
+sample operating-point metrics, **not test mAP or an overall accuracy claim**.
+Run GPU comparisons one at a time on a laptop. Experimental crop/scale variants
+are available only in the benchmark; they are not enabled in the application.
 
 ## Limitations
 

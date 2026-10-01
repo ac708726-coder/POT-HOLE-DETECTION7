@@ -6,10 +6,19 @@ import html
 
 import streamlit as st
 
+
 # Streamlit sanitises st.html and removes <script>, so anything that needs real
 # JavaScript has to go through st.iframe, which renders in an iframe. Passing
 # markup rather than a URL is supported: a src that matches no URL pattern is
 # embedded as raw HTML.
+def scan_metrics(items: list[tuple[str, str | int]]) -> None:
+    """Native metric tiles with a scoped 4-column / 2-column responsive layout."""
+    with st.container(key="scan_metrics"):
+        columns = st.columns(len(items))
+        for column, (label, value) in zip(columns, items):
+            column.metric(label, value)
+
+
 _SCENE_COLORS = {
     "ground": "#080e15",
     "dot": "#3c5266",
@@ -391,6 +400,32 @@ def apply_app_style() -> None:
         div[data-testid="stMetric"]::after {
             content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 34%;
             background: var(--detect); animation: sc-draw-x 780ms var(--ease) both;
+        }
+
+        /* Only scan tiles change layout; retain the existing theme and native metrics. */
+        .st-key-scan_metrics { container-type: inline-size; container-name: scan-tiles; }
+        .st-key-scan_metrics [data-testid="stHorizontalBlock"] {
+            display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+        .st-key-scan_metrics [data-testid="stColumn"] {
+            width: 100% !important; min-width: 0 !important;
+        }
+        .st-key-scan_metrics [data-testid="stMetricValue"] {
+            font-size: clamp(1.2rem, 2.4vw, 1.9rem);
+        }
+        .st-key-scan_metrics [data-testid="stMetricValue"] > div,
+        .st-key-scan_metrics [data-testid="stMetricLabel"] p {
+            white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
+        }
+        @container scan-tiles (max-width: 900px) {
+            .st-key-scan_metrics [data-testid="stHorizontalBlock"] {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 900px) {
+            .st-key-scan_metrics [data-testid="stHorizontalBlock"] {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
         }
 
         [data-testid="stFileUploaderDropzone"] {

@@ -1,0 +1,7 @@
+# TEMPLATE: replace with the absolute merged dataset folder before using.
+path: /absolute/path/to/data/mixed
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: pothole

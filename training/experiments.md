@@ -2,6 +2,100 @@
 
 Record every material experiment before comparing checkpoints.
 
+## 2026-10-01 targeted-replay experiment (completed; rejected)
+
+User explicitly requested additional training on missed potholes. Start from the
+installed checkpoint (SHA256
+`09b78ce3bf3643e840e32626a94f4e218f1feee501ba2879b48fdf37082fe2a0`). Mine
+misses from TRAIN only, using correct file-path decoding at 640px/confidence 0.35.
+Keep all original validation/test photos held out, checking exact-content overlap
+before building the new manifest. Fine-tune a separate 960px candidate for up to
+10 epochs with `--hard-example-preset`, batch 8 and workers 0 to bound laptop memory.
+This changes sampling, resolution and augmentation together, so an improvement
+cannot be attributed to a single factor.
+
+Predeclared validation gate at 640px: mAP50 gain >= 0.005, recall gain > 0,
+precision loss <= 0.02. Only the frozen validation winner reaches a final
+same-settings, full-test comparison and application operating-point check. Do not
+install a candidate that fails the gate or worsens held-out detection results.
+The current `models/best.pt` stays untouched during mining/training/evaluation.
+No original failed phone-photo uploads are available: this experiment addresses
+analogous labelled RDD2022 training failures, not proven phone-domain coverage.
+
+Comparison uses batch 16, FP16 (`--quantize 16`) and workers 0 for both checkpoints.
+The first slow FP32/batch-4 baseline diagnostic was interrupted before producing
+metrics; no comparison is made against that unfinished run or historic scores.
+
+To bound epoch time, checkpoint selection uses `--validation-subset 2000`
+(200 positives/1,800 negatives, seed 73). This is a separately recorded manifest
+within the existing validation split, never training data. The original full
+validation split is used for the promotion gate; the test split remains untouched.
+
+The first batch-8 attempt failed before epoch 1: CUDA OOM, followed by host-memory
+allocation failure during Ultralytics' automatic batch-4 retry. No candidate
+checkpoint was produced. Restart cold at batch **2**, workers 0, same 960px inputs
+and pre-generated validation manifest, under name `hard_examples_960_b2_20261001`.
+Keep the failed run folder for diagnostics; no checkpoint was installed.
+
+The batch-2 960px run also failed during epoch 1 with OpenCV host-memory allocation
+failure, before saving a checkpoint. A 640px/batch-2 cold restart
+(`hard_examples_640_b2_20261001`) progressed successfully beyond the initial
+optimizer steps. It retains the same mined/replay images, low-LR preset and fixed
+2,000-image checkpoint-selection validation manifest. 640px matches Fast/Balanced
+application inference. Neither failed 960px run altered `models/best.pt`.
+
+The 640px run saved epoch 1, then hit host-memory allocation failure during epoch 2.
+Its full validation evaluation is a diagnostic, not evidence of completed training.
+Before resuming, add explicit unused-cache cleanup at epoch boundaries/every 50
+batches and disable training plots. Preserve all model tensors, gradients and
+optimizer state; do not change data, resolution, learning-rate schedule or epochs.
+
+### Final outcome
+
+The resumed run completed **7 epochs total**, then stopped automatically (patience
+4; resume initializes the stopper independently of its pre-interruption history).
+The best checkpoint remained epoch 1. A planned stop request arrived after the
+process had already finished, so it did not terminate the run. Explicit cache
+cleanup and disabled plots allowed the resumed stages to complete without another
+memory failure. Normal completion stripped the candidate's optimizer state.
+
+Full original validation split: 7,718 images / 1,273 labelled pothole boxes.
+Both checkpoints used 640px, batch 16, FP16, workers 0 and the same evaluator/data
+config. The candidate's post-completion evaluation reproduced its epoch-1 metrics
+exactly; the later epochs did not yield a better checkpoint.
+
+| Metric | Current model | Candidate | Absolute change |
+|---|---:|---:|---:|
+| Precision | 0.527945 | 0.509514 | -0.018431 |
+| Recall | 0.439906 | 0.412090 | -0.027815 |
+| mAP50 | 0.445983 | 0.399606 | -0.046378 |
+| mAP50-95 | 0.199378 | 0.165362 | -0.034016 |
+
+**Rejected.** `models/best.pt` remains byte-for-byte unchanged (SHA256 above).
+The candidate failed the validation gate, so test-set and application-benchmark
+comparisons were intentionally not run. Do not present these validation results
+as test accuracy, or assume that hard-example replay/extra epochs help this model.
+
+Artifacts (Git-ignored):
+- `data/splits/hard_examples_20261001/mining.json`: all 6,395 TRAIN images mined;
+  1,521 positive images had at least one miss; no exact held-out overlap found.
+- Training selection: 2,400 unique photos, 1,200 positives/1,200 negatives;
+  600 hard positives repeated once (3,000 training appearances), 84 hard negatives,
+  210 China_Drone photos. Manifest SHA256
+  `54cd2a931900d2fb0179ce00e8c28f057b13793f6670dbdc2602517d3d1943ff`.
+- Checkpoint-selection validation: 200 positives/1,800 negatives, manifest SHA256
+  `ddbe1208c3ed00f007065994e35f48ec90a41a0ec8850500f6291f1c67ac01ec`.
+- `runs/pothole/hard_examples_640_b2_20261001/weights/best.pt`: rejected candidate,
+  SHA256 `7667c9f632af3804aff602b8ae208e74a30d7adaf2dd4c10843c8d36c9fc0672`.
+- `outputs/metrics/hard_examples_resume_20261001_result.json`: final comparison.
+
+Next useful experiment: review annotations/viewpoint coverage and add independently
+labelled phone/close-up examples with a separate untouched holdout. More epochs of
+this same replay recipe are not supported by the measured result. The 665-image
+[Roboflow public pothole dataset](https://public.roboflow.com/object-detection/pothole)
+is a candidate for review, listed under ODbL v1.0 by its source; it was not downloaded
+or used in this run. No Git commit, GitHub push, deployment or theme change was made.
+
 | Date | Name | Dataset version | Base model | Epochs | Image size | Batch | Precision | Recall | mAP50 | mAP50–95 | Notes |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
 | 2026-08-21 | baseline_cuda | RDD2022 India / D40 only | YOLO11n | 25 | 640 | 16 | 0.3582 | 0.2729 | 0.2519 | 0.0993 | PyTorch 2.11.0+cu130; selected epoch 24; held-out test metrics |

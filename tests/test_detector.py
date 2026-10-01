@@ -111,19 +111,53 @@ def test_merge_keeps_winning_box_coordinates_untouched() -> None:
     assert merged[0]["box"] == [0.0, 0.0, 10.0, 10.0]
 
 
-def test_merge_keeps_distinct_classes_separate() -> None:
+def test_merge_is_class_agnostic() -> None:
     detections = [
         {"class_id": 0, "confidence": 0.9, "box": [0.0, 0.0, 10.0, 10.0]},
         {"class_id": 1, "confidence": 0.8, "box": [0.0, 0.0, 10.0, 10.0]},
     ]
     merged = _merge_detections(detections, iou_threshold=0.45)
 
-    assert sorted(item["class_id"] for item in merged) == [0, 1]
+    assert [item["class_id"] for item in merged] == [0]
 
 
 def test_unknown_inference_profile_is_rejected() -> None:
     with pytest.raises(ValidationError, match="Inference profile"):
         inference_profile_details("unknown")
+
+
+def test_thorough_uses_tunable_1280_pass_and_deduplicates_across_scales():
+    from config import THOROUGH_IMAGE_SIZE
+
+    class MultiScaleModel:
+        def __init__(self):
+            self.sizes = []
+
+        def predict(self, **kwargs):
+            self.sizes.append(kwargs["imgsz"])
+            assert kwargs["agnostic_nms"] is True
+            return [FakeResult()]
+
+    model = MultiScaleModel()
+    result = predict_image(
+        Image.new("RGB", (100, 80)),
+        confidence=0.40,
+        model=model,
+        inference_profile="thorough",
+    )
+    assert THOROUGH_IMAGE_SIZE == 1280
+    assert model.sizes == [640, THOROUGH_IMAGE_SIZE]
+    assert result["count"] == 1
+
+
+def test_nms_empty_boxes_and_threshold_boundary():
+    assert _merge_detections([], 0.5) == []
+    boxes = [
+        {"class_id": 0, "confidence": 0.9, "box": [0, 0, 10, 10]},
+        {"class_id": 0, "confidence": 0.8, "box": [0, 0, 5, 10]},
+    ]
+    assert len(_merge_detections(boxes, 0.5)) == 1
+    assert len(_merge_detections(boxes, 0.51)) == 2
 
 
 def test_batch_prediction_preserves_result_order() -> None:

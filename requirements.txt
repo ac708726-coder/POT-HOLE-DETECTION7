@@ -15,6 +15,7 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 streamlit==1.62.0
+streamlit-cookies-controller==0.0.4
 ultralytics==8.4.125
 torch==2.11.0+cpu
 torchvision==0.26.0+cpu
@@ -25,6 +26,9 @@ opencv-python==4.14.0.94
 pillow==12.3.0
 numpy==2.5.2
 pandas==3.0.5
+# Reproducible dataset manifests and serial experiment monitoring.
+PyYAML==6.0.3
+psutil==7.2.2
 pytest==9.1.1
 ruff==0.16.4
 black==26.5.1

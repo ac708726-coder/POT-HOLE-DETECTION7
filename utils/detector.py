@@ -10,8 +10,13 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from config import DEFAULT_CONFIDENCE, DEFAULT_IOU_THRESHOLD, MODEL_PATH
-from utils.image_processor import annotate_image
+from config import (
+    DEFAULT_CONFIDENCE,
+    DEFAULT_IOU_THRESHOLD,
+    MODEL_PATH,
+    THOROUGH_IMAGE_SIZE,
+)
+from utils.image_processor import annotate_image, image_to_bgr
 from utils.validators import ValidationError, validate_confidence
 
 
@@ -27,7 +32,7 @@ INFERENCE_PROFILES: dict[str, dict[str, Any]] = {
     "fast": {
         "label": "Fast",
         "description": "One standard pass. Best for video and quick checks.",
-        "passes": ({},),
+        "passes": ({"imgsz": 640, "augment": False},),
     },
     "balanced": {
         "label": "Balanced",
@@ -36,10 +41,10 @@ INFERENCE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "thorough": {
         "label": "Thorough",
-        "description": "Two augmented scales, merged to reduce duplicate boxes.",
+        "description": f"Two augmented scales up to {THOROUGH_IMAGE_SIZE} px for small or distant damage.",
         "passes": (
             {"imgsz": 640, "augment": True},
-            {"imgsz": 960, "augment": True},
+            {"imgsz": THOROUGH_IMAGE_SIZE, "augment": True},
         ),
     },
 }
@@ -223,6 +228,8 @@ def _extract_detections(
         score_value = float(score)
         if score_value < confidence:
             continue
+        if not np.isfinite(score_value) or not np.all(np.isfinite(coordinates_row)):
+            continue
         x1, y1, x2, y2 = (float(value) for value in coordinates_row)
         clipped_box = [
             max(0.0, min(x1, width - 1)),
@@ -231,6 +238,8 @@ def _extract_detections(
             max(0.0, min(y2, height - 1)),
         ]
         class_id = int(class_value)
+        if clipped_box[2] <= clipped_box[0] or clipped_box[3] <= clipped_box[1]:
+            continue
         detections.append(
             {
                 "class_id": class_id,
@@ -259,22 +268,17 @@ def _box_iou(first: list[float], second: list[float]) -> float:
 def _merge_detections(
     detections: list[dict[str, Any]], iou_threshold: float
 ) -> list[dict[str, Any]]:
-    """Merge duplicate detections from multiple inference passes with NMS.
+    """Apply score-ordered, class-agnostic NMS across all inference passes.
 
-    Weighted Boxes Fusion was tried here — clustering overlapping same-class boxes and
-    replacing each cluster with a confidence-weighted average instead of dropping the
-    non-maximal boxes. Measured over the full 3,925-image test split on the thorough
-    profile it was slightly worse, not better: mAP50 0.2348 -> 0.2327 and mAP50-95
-    0.1120 -> 0.1115, with an identical detection count because fusion only moves box
-    coordinates. See outputs/metrics/wbf_vs_nms_thorough.json. Plain NMS stays.
+    Coordinates are in original-image pixels before this final suppression. Keep
+    the strongest box without averaging its location; distinct boxes survive.
     """
 
     ordered = sorted(detections, key=lambda item: item["confidence"], reverse=True)
     kept: list[dict[str, Any]] = []
     for candidate in ordered:
         duplicate = any(
-            candidate["class_id"] == existing["class_id"]
-            and _box_iou(candidate["box"], existing["box"]) >= iou_threshold
+            _box_iou(candidate["box"], existing["box"]) >= iou_threshold
             for existing in kept
         )
         if not duplicate:
@@ -305,7 +309,7 @@ def predict_image(
     model: Any | None = None,
     inference_profile: str = "fast",
 ) -> dict[str, Any]:
-    """Run inference and return model-independent detection data."""
+    """Run inference on a Pillow/RGB-array image and return stable detection data."""
 
     confidence = validate_confidence(confidence)
     iou_threshold = validate_confidence(iou_threshold)
@@ -323,9 +327,10 @@ def predict_image(
         detections: list[dict[str, Any]] = []
         for pass_options in profile["passes"]:
             results = active_model.predict(
-                source=np.asarray(pil_image),
+                source=image_to_bgr(pil_image),
                 conf=confidence,
                 iou=iou_threshold,
+                agnostic_nms=True,
                 verbose=False,
                 **_runtime_predict_options(),
                 **pass_options,
@@ -384,9 +389,10 @@ def predict_images(
     try:
         for pass_options in profile["passes"]:
             results = active_model.predict(
-                source=[np.asarray(image) for image in pil_images],
+                source=[image_to_bgr(image) for image in pil_images],
                 conf=confidence,
                 iou=iou_threshold,
+                agnostic_nms=True,
                 verbose=False,
                 **_runtime_predict_options(),
                 **pass_options,

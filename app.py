@@ -7,6 +7,12 @@ import streamlit as st
 from config import MODEL_PATH, ensure_runtime_directories
 from utils.auth import AuthError, create_user, user_count, verify_user
 from utils.observability import configure_logging, log_auth_event
+from utils.session import (
+    begin_session,
+    end_session,
+    flush_cookie_action,
+    restore_session,
+)
 from utils.ui import (
     account_badge,
     apply_app_style,
@@ -70,14 +76,9 @@ def home() -> None:
 
 
 def _sign_in_gate() -> None:
-    """Block the app until a visitor signs in, then keep them in session.
+    """Restore a valid signed cookie, or show the existing account forms."""
 
-    Streamlit session state lives on the server and is keyed to the browser
-    session, so closing the tab signs the person out. There is no cookie and
-    no "remember me"; that is the trade for not shipping a token store.
-    """
-
-    if st.session_state.get("user_id"):
+    if restore_session():
         return
 
     signin_shell(
@@ -99,8 +100,9 @@ def _sign_in_gate() -> None:
                 )
             if submitted:
                 try:
-                    st.session_state["user_id"] = verify_user(username, password)
-                    st.session_state["username"] = username.strip().lower()
+                    begin_session(
+                        verify_user(username, password), username.strip().lower()
+                    )
                 except AuthError as exc:
                     log_auth_event("sign-in-refused", username, reason=exc)
                     st.error(str(exc), icon=":material/lock:")
@@ -126,10 +128,10 @@ def _sign_in_gate() -> None:
                     st.error("Passwords do not match.", icon=":material/error:")
                 else:
                     try:
-                        st.session_state["user_id"] = create_user(
-                            new_username, new_password
+                        begin_session(
+                            create_user(new_username, new_password),
+                            new_username.strip().lower(),
                         )
-                        st.session_state["username"] = new_username.strip().lower()
                     except AuthError as exc:
                         log_auth_event("register-refused", new_username, reason=exc)
                         st.error(str(exc), icon=":material/error:")
@@ -139,20 +141,17 @@ def _sign_in_gate() -> None:
 
     if user_count() == 0:
         st.caption("No accounts yet. Create the first one to begin.")
-    st.caption(
-        "Passwords are stored as salted scrypt hashes, never in plain text. "
-        "Serve this app over HTTPS so they are not readable in transit."
-    )
+    st.caption("Your detection history is private to your account.")
     st.stop()
 
 
 def _sign_out() -> None:
     log_auth_event("sign-out", str(st.session_state.get("username", "")))
-    for key in ("user_id", "username"):
-        st.session_state.pop(key, None)
+    end_session()
     st.rerun()
 
 
+flush_cookie_action()
 _sign_in_gate()
 
 with st.sidebar:
