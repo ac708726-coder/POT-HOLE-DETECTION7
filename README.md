@@ -35,6 +35,24 @@ streamlit run app.py
 Open the local address printed by Streamlit. The app uses native Streamlit navigation
 for Image detection, Video detection, and Detection history.
 
+## Persistent sign-in
+
+Set `DIVOT_COOKIE_SIGNING_KEY` to a random secret of at least 32 bytes in Streamlit
+Cloud's **App settings → Secrets**, or in the environment. For local development,
+the same top-level setting can go in `.streamlit/secrets.toml` (gitignored).
+Generate a value locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+Never commit the generated value. Without a valid key, login works for the current
+session only. Use the same stable key across restarts; rotating it signs everyone out.
+
+Sign-in uses an HMAC-SHA256 signed cookie expiring after seven days. The cookie has
+path `/`, SameSite=Lax and Secure on HTTPS. Server checks include account existence,
+expiry, password changes, and revocation on Sign out. Password hashing stays scrypt.
+The [cookie controller](https://github.com/NathanChen198/streamlit-cookies-controller)
+writes browser cookies from JavaScript, so the cookie cannot be HttpOnly; do not
+inject untrusted JavaScript into this app. Tokens are signed, not encrypted, and
+contain an account id and random session id, never passwords. The account/session
+store is the existing SQLite database: losing that database invalidates the cookies.
+
 ## Model placement
 
 The trained single-class checkpoint is already stored at `models/best.pt`, where class

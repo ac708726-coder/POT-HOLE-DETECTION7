@@ -15,6 +15,7 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 streamlit==1.62.0
+streamlit-cookies-controller==0.0.4
 ultralytics==8.4.125
 torch==2.11.0+cpu
 torchvision==0.26.0+cpu
