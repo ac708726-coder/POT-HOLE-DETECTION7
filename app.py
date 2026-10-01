@@ -141,10 +141,7 @@ def _sign_in_gate() -> None:
 
     if user_count() == 0:
         st.caption("No accounts yet. Create the first one to begin.")
-    st.caption(
-        "Passwords are stored as salted scrypt hashes, never in plain text. "
-        "Serve this app over HTTPS so they are not readable in transit."
-    )
+    st.caption("Your detection history is private to your account.")
     st.stop()
 
 
