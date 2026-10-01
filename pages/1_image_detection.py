@@ -12,6 +12,7 @@ from config import (
     MIN_SCAN_CONFIDENCE,
     MODEL_PATH,
 )
+from utils.detection_details import no_detection_hint
 from utils.detector import (
     DetectorError,
     ModelNotFoundError,
@@ -209,9 +210,7 @@ metric_d.metric("Scan mode", selected_profile["label"])
 
 if result["count"] == 0:
     st.warning(
-        "No candidate met this threshold. This does not prove the road has no "
-        "potholes—try Balanced or Thorough mode and lower confidence by 0.05 for "
-        "wet, dark, or distant damage.",
+        no_detection_hint(str(mode), confidence),
         icon=":material/search_off:",
     )
 else:
