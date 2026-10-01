@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 import streamlit as st
 
-from config import DEFAULT_CONFIDENCE, MAX_VIDEO_SIZE_MB, MODEL_PATH
+from config import DEFAULT_CONFIDENCE, MAX_VIDEO_SIZE_MB, MIN_SCAN_CONFIDENCE, MODEL_PATH
 from utils.detector import (
     DetectorError,
     ModelNotFoundError,
@@ -88,7 +88,7 @@ with controls_col, st.form("video_scan_controls", border=True):
     st.caption(inference_profile_details(str(mode))["description"])
     confidence = st.slider(
         "Minimum confidence",
-        min_value=0.05,
+        min_value=MIN_SCAN_CONFIDENCE,
         max_value=0.95,
         value=DEFAULT_CONFIDENCE,
         step=0.05,

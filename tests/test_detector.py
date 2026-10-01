@@ -111,14 +111,14 @@ def test_merge_keeps_winning_box_coordinates_untouched() -> None:
     assert merged[0]["box"] == [0.0, 0.0, 10.0, 10.0]
 
 
-def test_merge_keeps_distinct_classes_separate() -> None:
+def test_merge_is_class_agnostic() -> None:
     detections = [
         {"class_id": 0, "confidence": 0.9, "box": [0.0, 0.0, 10.0, 10.0]},
         {"class_id": 1, "confidence": 0.8, "box": [0.0, 0.0, 10.0, 10.0]},
     ]
     merged = _merge_detections(detections, iou_threshold=0.45)
 
-    assert sorted(item["class_id"] for item in merged) == [0, 1]
+    assert [item["class_id"] for item in merged] == [0]
 
 
 def test_unknown_inference_profile_is_rejected() -> None:

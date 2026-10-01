@@ -259,22 +259,17 @@ def _box_iou(first: list[float], second: list[float]) -> float:
 def _merge_detections(
     detections: list[dict[str, Any]], iou_threshold: float
 ) -> list[dict[str, Any]]:
-    """Merge duplicate detections from multiple inference passes with NMS.
+    """Apply score-ordered, class-agnostic NMS across all inference passes.
 
-    Weighted Boxes Fusion was tried here — clustering overlapping same-class boxes and
-    replacing each cluster with a confidence-weighted average instead of dropping the
-    non-maximal boxes. Measured over the full 3,925-image test split on the thorough
-    profile it was slightly worse, not better: mAP50 0.2348 -> 0.2327 and mAP50-95
-    0.1120 -> 0.1115, with an identical detection count because fusion only moves box
-    coordinates. See outputs/metrics/wbf_vs_nms_thorough.json. Plain NMS stays.
+    Coordinates are in original-image pixels before this final suppression. Keep
+    the strongest box without averaging its location; distinct boxes survive.
     """
 
     ordered = sorted(detections, key=lambda item: item["confidence"], reverse=True)
     kept: list[dict[str, Any]] = []
     for candidate in ordered:
         duplicate = any(
-            candidate["class_id"] == existing["class_id"]
-            and _box_iou(candidate["box"], existing["box"]) >= iou_threshold
+            _box_iou(candidate["box"], existing["box"]) >= iou_threshold
             for existing in kept
         )
         if not duplicate:
@@ -326,6 +321,7 @@ def predict_image(
                 source=np.asarray(pil_image),
                 conf=confidence,
                 iou=iou_threshold,
+                agnostic_nms=True,
                 verbose=False,
                 **_runtime_predict_options(),
                 **pass_options,
@@ -387,6 +383,7 @@ def predict_images(
                 source=[np.asarray(image) for image in pil_images],
                 conf=confidence,
                 iou=iou_threshold,
+                agnostic_nms=True,
                 verbose=False,
                 **_runtime_predict_options(),
                 **pass_options,

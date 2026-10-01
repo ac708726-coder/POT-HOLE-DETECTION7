@@ -11,6 +11,7 @@ from config import (
     DEFAULT_CONFIDENCE,
     DEFAULT_IOU_THRESHOLD,
     MAX_IMAGE_SIZE_MB,
+    MIN_SCAN_CONFIDENCE,
     MODEL_PATH,
 )
 from utils.detector import (
@@ -99,7 +100,7 @@ with controls_col, st.form("image_scan_controls", border=True):
     st.caption(selected_profile["description"])
     confidence = st.slider(
         "Minimum confidence",
-        min_value=0.05,
+        min_value=MIN_SCAN_CONFIDENCE,
         max_value=0.95,
         value=DEFAULT_CONFIDENCE,
         step=0.05,
