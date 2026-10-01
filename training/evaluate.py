@@ -31,6 +31,8 @@ def parse_args() -> argparse.Namespace:
         default=PROJECT_ROOT / "outputs" / "metrics" / "test_metrics.json",
     )
     parser.add_argument("--device", default=None)
+    parser.add_argument("--split", choices=["val", "test"], default="test")
+    parser.add_argument("--quantize", type=int, choices=[16, 32], default=32)
     parser.add_argument("--failure-confidence", type=float, default=0.15)
     parser.add_argument("--failure-iou", type=float, default=0.50)
     parser.add_argument(
@@ -85,10 +87,11 @@ def save_failure_cases(model: Any, args: argparse.Namespace, device: str) -> Pat
     from ultralytics.data.utils import IMG_FORMATS, check_det_dataset, img2label_paths
 
     dataset = check_det_dataset(str(args.data), autodownload=False)
-    sources = dataset.get("test")
+    split = getattr(args, "split", "test")
+    sources = dataset.get(split)
     if not sources:
         raise ValueError(
-            "A labelled test split is required for failure-case collection."
+            f"A labelled {split} split is required for failure-case collection."
         )
     files = []
     for source in sources if isinstance(sources, list) else [sources]:
@@ -147,7 +150,8 @@ def save_failure_cases(model: Any, args: argparse.Namespace, device: str) -> Pat
                 ]
             )
         result = model.predict(
-            source=np.asarray(image),
+            # NumPy sources use BGR; saved Pillow failure images remain RGB.
+            source=np.ascontiguousarray(np.asarray(image)[..., ::-1]),
             imgsz=args.imgsz,
             conf=args.failure_confidence,
             iou=0.5,
@@ -222,14 +226,19 @@ def main() -> None:
     except ImportError as exc:
         raise SystemExit("Install requirements.txt before evaluation.") from exc
 
+    torch.set_num_threads(4)
+
     options: dict[str, Any] = {
         "data": str(args.data),
-        "split": "test",
+        "split": args.split,
         "imgsz": args.imgsz,
         "batch": args.batch,
         "project": str(PROJECT_ROOT / "outputs" / "metrics"),
         "name": args.name,
         "plots": True,
+        "workers": 0,
+        "cache": False,
+        "quantize": args.quantize,
     }
     selected_device = args.device
     if selected_device is None:
@@ -242,6 +251,14 @@ def main() -> None:
     box = metrics.box
     summary = {
         "weights": str(args.weights),
+        "weights_sha256": hashlib.sha256(args.weights.read_bytes()).hexdigest(),
+        "split": args.split,
+        "imgsz": args.imgsz,
+        "data": str(args.data.resolve()),
+        "data_config_sha256": hashlib.sha256(args.data.read_bytes()).hexdigest(),
+        "torch_version": torch.__version__,
+        "quantize": args.quantize,
+        "batch": args.batch,
         "precision": _number(getattr(box, "mp", None)),
         "recall": _number(getattr(box, "mr", None)),
         "map50": _number(getattr(box, "map50", None)),

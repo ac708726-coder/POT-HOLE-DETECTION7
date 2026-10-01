@@ -9,6 +9,7 @@ import streamlit as st
 
 from config import (
     DEFAULT_CONFIDENCE,
+    INFERENCE_REVISION,
     MAX_VIDEO_SIZE_MB,
     MIN_SCAN_CONFIDENCE,
     MODEL_PATH,
@@ -124,7 +125,9 @@ with controls_col, st.container(key="video_scan_controls", border=True):
     )
 
 model_signature = (
-    f"{model_stat.st_mtime_ns}:{model_stat.st_size}" if model_stat else "missing"
+    f"{model_stat.st_mtime_ns}:{model_stat.st_size}:{INFERENCE_REVISION}"
+    if model_stat
+    else "missing"
 )
 result_key = scan_key(video_bytes, str(mode), confidence, int(frame_skip))
 settings_changed = sync_scan_inputs(

@@ -5,8 +5,9 @@ already handled in code are marked so, with a pointer to where.
 
 ## 1. Configuration and secrets
 
-The app has no API keys or third-party credentials. Everything configurable is
-an environment variable read in `config.py` and `utils/observability.py`.
+The app needs no third-party API credentials. Configuration comes from environment
+variables; persistent sign-in additionally reads `DIVOT_COOKIE_SIGNING_KEY` from
+the environment or Streamlit Secrets through `utils/session.py`.
 
 1. Copy `.env.example` to `.env` on the host and set the values. `.env` is
    git-ignored; never commit it.
@@ -17,6 +18,10 @@ an environment variable read in `config.py` and `utils/observability.py`.
 4. Set `STREAMLIT_CLIENT_SHOW_ERROR_DETAILS=none` in production. Without it
    Streamlit renders the traceback in the browser. Errors still reach the log
    through `report_error`, which shows the user a short reference id instead.
+5. Set `DIVOT_COOKIE_SIGNING_KEY` to a stable random secret of at least 32 bytes.
+   Generate it privately with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+   Never commit its value. Without it, sign-in remains session-only; rotating it
+   invalidates existing login cookies. See the README's persistent sign-in section.
 
 ## 2. TLS
 
@@ -145,11 +150,11 @@ treats the account as permanent.
 
 ### Steps
 
-1. Push this branch and open <https://share.streamlit.io>, then sign in with
+1. Push and merge the release into `main`, then open <https://share.streamlit.io> and sign in with
    the GitHub account that owns the repository.
 2. **New app** -> **Deploy a public app from GitHub**, and select:
    - Repository: `ac708726-coder/POT-HOLE-DETECTION7`
-   - Branch: `deploy/streamlit-cloud`
+   - Branch: `main`
    - Main file path: `app.py`
    - Python version: 3.12
 3. Under **Advanced settings**, paste into the secrets box:
@@ -158,10 +163,22 @@ treats the account as permanent.
    POTHOLE_LOG_LEVEL = "INFO"
    ```
 
+   Also add `DIVOT_COOKIE_SIGNING_KEY` with your privately generated value. Do not
+   copy a placeholder or publish the key in GitHub. Cookie persistence requires
+   this setting and a surviving account/session database; cookies do not make
+   Community Cloud's local SQLite database durable.
+
    Streamlit exposes secrets as environment variables, which is what
    `config.py` reads. Leave the paths at their defaults; the model ships in the
    repository and the database is created on first run.
 4. Deploy. The first build takes several minutes — it installs torch.
+
+For an existing app, confirm its deployed repository, branch and entry point match
+the settings above. Community Cloud updates from the **configured branch**; merging
+into `main` will not update an app still pointing at `deploy/streamlit-cloud`.
+Code and dependency changes rebuild automatically after that branch updates. Check
+the Cloud build logs before treating a release as live. Training/benchmark scripts
+are offline tools and are never launched by `app.py`.
 
 ### What this branch changes for the platform
 

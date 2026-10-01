@@ -30,7 +30,7 @@ def test_failure_export_saves_missed_boxes_and_negative_false_positives(
     images.mkdir(parents=True)
     labels.mkdir(parents=True)
     for name, label in [("positive", "0 0.5 0.5 0.5 0.5"), ("negative", "")]:
-        Image.new("RGB", (100, 100), "gray").save(images / f"{name}.png")
+        Image.new("RGB", (100, 100), (240, 30, 10)).save(images / f"{name}.png")
         (labels / f"{name}.txt").write_text(label)
     monkeypatch.setattr(
         utils, "check_det_dataset", lambda *args, **kwargs: {"test": str(images)}
@@ -38,6 +38,7 @@ def test_failure_export_saves_missed_boxes_and_negative_false_positives(
 
     class Model:
         def predict(self, **kwargs):
+            assert kwargs["source"][0, 0].tolist() == [10, 30, 240]
             # Same prediction on both images: FP on the negative, miss on the positive.
             return [
                 SimpleNamespace(

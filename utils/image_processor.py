@@ -6,11 +6,21 @@ from collections.abc import Iterable
 from io import BytesIO
 from typing import Any
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
 
 class ImageProcessingError(RuntimeError):
     """Raised when an image cannot be decoded or encoded."""
+
+
+def image_to_bgr(image: Image.Image) -> np.ndarray:
+    """Return contiguous BGR for YOLO; Pillow/UI images remain RGB.
+
+    Ultralytics assumes NumPy sources are BGR and reverses their channels before
+    inference. Sending an RGB array instead feeds the model the wrong colours.
+    """
+    return np.ascontiguousarray(np.asarray(image.convert("RGB"))[..., ::-1])
 
 
 def decode_image(data: bytes) -> Image.Image:

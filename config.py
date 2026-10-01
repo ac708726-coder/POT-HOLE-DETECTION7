@@ -22,6 +22,8 @@ METRICS_OUTPUT_DIR = OUTPUTS_DIR / "metrics"
 DEFAULT_CONFIDENCE = 0.35
 DEFAULT_IOU_THRESHOLD = 0.50
 MIN_SCAN_CONFIDENCE = 0.15
+# Bump when preprocessing/inference changes so open sessions discard stale scans.
+INFERENCE_REVISION = "bgr-input-v1"
 # Highest-resolution Thorough pass; tune in multiples of the YOLO stride (32).
 THOROUGH_IMAGE_SIZE = 1280
 MAX_IMAGE_SIZE_MB = 10

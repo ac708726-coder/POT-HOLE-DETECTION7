@@ -11,10 +11,15 @@ TensorFlow, Keras, and ONNX Runtime are not used.
 
 The application, utilities, RDD2022 data pipeline, tests, documentation, and trained
 checkpoint are implemented. `models/best.pt` is a YOLO11s checkpoint fine-tuned on the
-seven RDD2022 country subsets for 25 base epochs plus an 8-epoch low-rate refinement
+seven RDD2022 country subsets for 60 base epochs plus a 5-epoch low-rate refinement
 stage, trained with PyTorch 2.11.0 on CUDA 13.0 and an RTX 4060 Laptop GPU. It improves
 geographic coverage and strict localization, but it is not a production-quality
 road-safety model.
+
+The 2026-10-01 hard-example fine-tuning candidate was rejected after a worse
+full-validation result. The application retains the original checkpoint; see
+`docs/hard_example_training_2026-10-01.md`. The colour-input correction improves
+the inference path without changing those weights.
 
 Run every command below through the project virtual environment at `.venv`, which is
 where the pinned CUDA build of PyTorch lives. A bare `python` on PATH may resolve to a
@@ -165,11 +170,11 @@ Central settings live in `config.py`:
 - Image types: JPG, JPEG, PNG; maximum 10 MB.
 - Video types: MP4, MOV, AVI; maximum 200 MB and five minutes.
 - Default confidence: 0.35, a selective starting point that can be lowered when recall matters more.
-- Default IoU threshold: 0.45.
+- Default IoU threshold: 0.50 (class-agnostic NMS).
 - Database: `database/potholes.db`, created only when history is used.
 
 Image inference includes three PyTorch modes: Fast uses one standard 640-pixel pass,
-Balanced uses test-time augmentation, and Thorough merges augmented 640- and 960-pixel
+Balanced uses test-time augmentation, and Thorough merges augmented 640- and 1280-pixel
 passes. Overlapping boxes from multiple passes are merged with NMS. Video defaults to
 Fast mode to preserve throughput.
 CUDA laptops automatically use FP16 inference and four-frame video batching. Balanced
@@ -191,6 +196,26 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 
 A `+cpu` version string or `False` means inference runs on CPU regardless of the
 available hardware.
+
+### Verify detection changes with real labelled images
+
+Pillow/UI images and this application's NumPy inputs are RGB. Before calling YOLO,
+`image_to_bgr()` creates a contiguous BGR NumPy buffer, as required by
+[Ultralytics' input contract](https://docs.ultralytics.com/modes/predict/#inference-sources).
+This applies to single images, batched video frames, and failure-case evaluation.
+Changing colour order does not retrain or replace `models/best.pt`.
+
+```powershell
+python scripts/benchmark_detection_recall.py --positives 100 --negatives 900 --seed 99 --output outputs/metrics/color_fix_confirmation.json
+```
+
+The benchmark uses the existing **validation** split, keeps negative road images,
+and compares the legacy colour bug with the corrected application path using the
+same weights, images, confidence and matching IoU. It writes per-image predictions,
+precision/recall at 0.15/0.25/0.35, and illustrative recovery images. These are
+sample operating-point metrics, **not test mAP or an overall accuracy claim**.
+Run GPU comparisons one at a time on a laptop. Experimental crop/scale variants
+are available only in the benchmark; they are not enabled in the application.
 
 ## Limitations
 

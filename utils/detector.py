@@ -16,7 +16,7 @@ from config import (
     MODEL_PATH,
     THOROUGH_IMAGE_SIZE,
 )
-from utils.image_processor import annotate_image
+from utils.image_processor import annotate_image, image_to_bgr
 from utils.validators import ValidationError, validate_confidence
 
 
@@ -32,7 +32,7 @@ INFERENCE_PROFILES: dict[str, dict[str, Any]] = {
     "fast": {
         "label": "Fast",
         "description": "One standard pass. Best for video and quick checks.",
-        "passes": ({},),
+        "passes": ({"imgsz": 640, "augment": False},),
     },
     "balanced": {
         "label": "Balanced",
@@ -228,6 +228,8 @@ def _extract_detections(
         score_value = float(score)
         if score_value < confidence:
             continue
+        if not np.isfinite(score_value) or not np.all(np.isfinite(coordinates_row)):
+            continue
         x1, y1, x2, y2 = (float(value) for value in coordinates_row)
         clipped_box = [
             max(0.0, min(x1, width - 1)),
@@ -236,6 +238,8 @@ def _extract_detections(
             max(0.0, min(y2, height - 1)),
         ]
         class_id = int(class_value)
+        if clipped_box[2] <= clipped_box[0] or clipped_box[3] <= clipped_box[1]:
+            continue
         detections.append(
             {
                 "class_id": class_id,
@@ -305,7 +309,7 @@ def predict_image(
     model: Any | None = None,
     inference_profile: str = "fast",
 ) -> dict[str, Any]:
-    """Run inference and return model-independent detection data."""
+    """Run inference on a Pillow/RGB-array image and return stable detection data."""
 
     confidence = validate_confidence(confidence)
     iou_threshold = validate_confidence(iou_threshold)
@@ -323,7 +327,7 @@ def predict_image(
         detections: list[dict[str, Any]] = []
         for pass_options in profile["passes"]:
             results = active_model.predict(
-                source=np.asarray(pil_image),
+                source=image_to_bgr(pil_image),
                 conf=confidence,
                 iou=iou_threshold,
                 agnostic_nms=True,
@@ -385,7 +389,7 @@ def predict_images(
     try:
         for pass_options in profile["passes"]:
             results = active_model.predict(
-                source=[np.asarray(image) for image in pil_images],
+                source=[image_to_bgr(image) for image in pil_images],
                 conf=confidence,
                 iou=iou_threshold,
                 agnostic_nms=True,

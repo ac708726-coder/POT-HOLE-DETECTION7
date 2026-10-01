@@ -3,9 +3,44 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def attach_memory_safety(model) -> None:
+    """Release unused caches between stages on memory-constrained laptops.
+
+    Model/optimizer tensors and gradient accumulation are not modified. Standard
+    Ultralytics cleanup is VRAM-threshold-based, but Windows host commit can be
+    exhausted even when allocated VRAM is low.
+    """
+    import gc
+
+    import torch
+
+    batches = 0
+
+    def trim(_trainer):
+        gc.collect()
+        if getattr(getattr(_trainer, "device", None), "type", None) == "cuda":
+            torch.cuda.empty_cache()
+
+    def batch_end(trainer):
+        nonlocal batches
+        batches += 1
+        if batches % 50 == 0:
+            trim(trainer)
+
+    def prepare(trainer):
+        trainer.args.plots = False
+        trim(trainer)
+
+    model.add_callback("on_pretrain_routine_start", prepare)
+    model.add_callback("on_train_epoch_start", trim)
+    model.add_callback("on_fit_epoch_end", trim)
+    model.add_callback("on_train_batch_end", batch_end)
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,6 +70,12 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument(
+        "--validation-subset",
+        type=int,
+        default=None,
+        help="Budget checkpoint selection on a fixed stratified val subset; evaluate full val afterward.",
+    )
     parser.add_argument("--name", default="baseline")
     parser.add_argument("--device", default=None, help="For example: cpu, 0, or 0,1")
     parser.add_argument(
@@ -72,6 +113,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--hard-example-preset",
+        action="store_true",
+        help="Low-LR replay fine-tune with moderate zoom/lighting/viewpoint augmentation.",
+    )
+    parser.add_argument(
         "--multi-scale",
         action="store_true",
         help=(
@@ -84,6 +130,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.accuracy_preset and args.hard_example_preset:
+        raise SystemExit("Choose only one fine-tuning preset.")
     if not args.data.is_file():
         raise SystemExit(f"Dataset configuration not found: {args.data}")
 
@@ -92,6 +140,9 @@ def main() -> None:
         from ultralytics import YOLO
     except ImportError as exc:
         raise SystemExit("Install requirements.txt before training.") from exc
+
+    if args.hard_example_preset:
+        torch.set_num_threads(4)
 
     selected_device = args.device
     if selected_device is None:
@@ -113,10 +164,25 @@ def main() -> None:
                 "without --resume, or correct --name."
             )
         print(f"Resuming from {last_checkpoint}")
-        YOLO(str(last_checkpoint)).train(resume=True)
+        resumed = YOLO(str(last_checkpoint))
+        if args.hard_example_preset:
+            attach_memory_safety(resumed)
+        resumed.train(resume=True)
         return
 
+    if run_directory.exists():
+        raise SystemExit(f"Run already exists: {run_directory}; choose a new --name.")
+
+    if args.validation_subset is not None:
+        # This helper imports only evaluation utilities, not the Streamlit app.
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from training.hard_examples import prepare_validation_subset
+
+        args.data = prepare_validation_subset(args.data, args.validation_subset)
+
     model = YOLO(args.model)
+    if args.hard_example_preset:
+        attach_memory_safety(model)
     options = {
         "data": str(args.data),
         "epochs": args.epochs,
@@ -165,6 +231,30 @@ def main() -> None:
                 "amp": True,
                 "plots": True,
                 "save_period": 5,
+            }
+        )
+    if args.hard_example_preset:
+        options.update(
+            {
+                "optimizer": "AdamW",
+                "lr0": 0.00005,
+                "lrf": 0.2,
+                "warmup_epochs": 0.0,
+                "warmup_bias_lr": 0.0,
+                "weight_decay": 0.0005,
+                "patience": 4,
+                "mosaic": 0.0,
+                "close_mosaic": 0,
+                "scale": 0.35,
+                "degrees": 10.0,
+                "translate": 0.1,
+                "perspective": 0.0002,
+                "hsv_h": 0.015,
+                "hsv_s": 0.4,
+                "hsv_v": 0.3,
+                "cache": False,
+                "save_period": 1,
+                "plots": False,
             }
         )
     # Explicit flags win over the accuracy preset's own patience/save_period values.
