@@ -23,7 +23,13 @@ from utils.observability import report_error
 from utils.scan_state import scan_key, store_scan_result, sync_scan_inputs
 from utils.session import require_user
 from utils.storage import create_detection_record
-from utils.ui import media_stamp, page_intro, scanning_banner, section_heading
+from utils.ui import (
+    media_stamp,
+    page_intro,
+    scan_metrics,
+    scanning_banner,
+    section_heading,
+)
 from utils.validators import (
     ValidationError,
     safe_generated_filename,
@@ -193,11 +199,14 @@ section_heading(
     "Review the processed footage",
     "Inspect the annotated route and the approximate recurring-candidate count.",
 )
-metric_a, metric_b, metric_c, metric_d = st.columns(4)
-metric_a.metric("Unique potholes (estimate)", details["unique_count_estimate"])
-metric_b.metric("Processing time", f"{details['processing_seconds']:.1f} s")
-metric_c.metric("Processing speed", f"{details['processing_fps']:.1f} FPS")
-metric_d.metric("Mode", inference_profile_details(str(mode))["label"])
+scan_metrics(
+    [
+        ("Potholes", details["unique_count_estimate"]),
+        ("Time", f"{details['processing_seconds']:.1f} s"),
+        ("Speed", f"{details['processing_fps']:.1f} FPS"),
+        ("Mode", inference_profile_details(str(mode))["label"]),
+    ]
+)
 
 with st.container(border=True):
     st.video(saved["video_bytes"], format="video/mp4")

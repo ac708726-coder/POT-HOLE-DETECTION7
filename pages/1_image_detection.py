@@ -30,6 +30,7 @@ from utils.ui import (
     media_stamp,
     page_intro,
     result_reveal,
+    scan_metrics,
     scanning_banner,
     section_heading,
 )
@@ -202,11 +203,14 @@ else:
 
 confidences = [item["confidence"] for item in result["detections"]]
 average_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-metric_a, metric_b, metric_c, metric_d = st.columns(4)
-metric_a.metric("Potholes", result["count"])
-metric_b.metric("Average confidence", f"{average_confidence:.0%}")
-metric_c.metric("Scan time", f"{result['inference_ms']:.0f} ms")
-metric_d.metric("Scan mode", selected_profile["label"])
+scan_metrics(
+    [
+        ("Potholes", result["count"]),
+        ("Avg conf", f"{average_confidence:.0%}"),
+        ("Time", f"{result['inference_ms'] / 1000:.2f} s"),
+        ("Mode", selected_profile["label"]),
+    ]
+)
 
 if result["count"] == 0:
     st.warning(
