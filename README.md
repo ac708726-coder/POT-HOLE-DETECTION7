@@ -1,254 +1,222 @@
-# Road Pothole Detection
+# Divot
 
-A responsive Streamlit application for detecting visible potholes in uploaded road
-images and videos with a trained single-class Ultralytics YOLO model.
+Pothole detection for road photos and videos.
 
-PyTorch is the only deep-learning runtime. Ultralytics supplies the YOLO model API, while
-training, inference, checkpoints, tensors, and CUDA execution are handled by PyTorch.
-TensorFlow, Keras, and ONNX Runtime are not used.
+Divot lets you upload a road image or a short video, mark the potholes the model
+finds, and review the results before saving or downloading them. It brings the
+detector, scan controls, and inspection history into one Streamlit app instead of
+requiring a separate script for every scan.
 
-## Current status
+The detector is a trained **YOLO11s model running on PyTorch**. The weights are
+included in this repository: you do not need the training dataset or a separate
+YOLO program to use the app. It runs on a CPU, with GPU acceleration available on
+compatible NVIDIA systems.
 
-The application, utilities, RDD2022 data pipeline, tests, documentation, and trained
-checkpoint are implemented. `models/best.pt` is a YOLO11s checkpoint fine-tuned on the
-seven RDD2022 country subsets for 60 base epochs plus a 5-epoch low-rate refinement
-stage, trained with PyTorch 2.11.0 on CUDA 13.0 and an RTX 4060 Laptop GPU. It improves
-geographic coverage and strict localization, but it is not a production-quality
-road-safety model.
+## What you can do
 
-The 2026-10-01 hard-example fine-tuning candidate was rejected after a worse
-full-validation result. The application retains the original checkpoint; see
-`docs/hard_example_training_2026-10-01.md`. The colour-input correction improves
-the inference path without changing those weights.
+- **Overview:** choose an image or video inspection.
+- **Image detection:** compare the original and annotated photo, review per-box
+  confidence and measurements, and download the annotated image.
+- **Video detection:** process selected frames and download an annotated video.
+  Approximate tracking associates detections across frames, but does not guarantee
+  an exact count of unique potholes.
+- **Detection history:** save scan summaries to your account, filter previous
+  inspections, and export the visible records as CSV.
 
-Run every command below through the project virtual environment at `.venv`, which is
-where the pinned CUDA build of PyTorch lives. A bare `python` on PATH may resolve to a
-different interpreter with a CPU-only torch, which silently disables GPU inference.
+Image results show the pothole count, average and maximum confidence, inference
+time, and individual detections. Changing the upload, mode, or confidence clears
+the old result so it is not mistaken for a fresh scan.
 
-## Setup on Windows PowerShell
+## Choosing a scan mode
 
-```powershell
-Set-Location -LiteralPath 'D:\POT HOLE DETECTION'
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu130
-python -m pip install -r requirements.txt
-streamlit run app.py
-```
+| Mode | What it runs | When to use it |
+|---|---|---|
+| Fast | One 640px pass | Quick checks and video processing |
+| Balanced | A 640px pass with test-time augmentation | A starting point for still images |
+| Thorough | Augmented 640px and 1280px passes | A slower second look at missed or small potholes |
 
-Open the local address printed by Streamlit. The app uses native Streamlit navigation
-for Image detection, Video detection, and Detection history.
+Overlapping boxes are filtered with class-agnostic non-maximum suppression at
+IoU 0.50. Confidence defaults to **0.35**, with a minimum of **0.15**. Lowering it
+can recover missed potholes, but also produces more false positives. Thorough
+is not always more accurate than Balanced, and zero detections does not mean
+the road is undamaged.
 
-## Persistent sign-in
+The highest Thorough resolution is `THOROUGH_IMAGE_SIZE` in [config.py](config.py).
+Increasing it costs more time and memory, especially on CPU-only hosting.
 
-Set `DIVOT_COOKIE_SIGNING_KEY` to a random secret of at least 32 bytes in Streamlit
-Cloud's **App settings → Secrets**, or in the environment. For local development,
-the same top-level setting can go in `.streamlit/secrets.toml` (gitignored).
-Generate a value locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-Never commit the generated value. Without a valid key, login works for the current
-session only. Use the same stable key across restarts; rotating it signs everyone out.
+## Run it locally
 
-Sign-in uses an HMAC-SHA256 signed cookie expiring after seven days. The cookie has
-path `/`, SameSite=Lax and Secure on HTTPS. Server checks include account existence,
-expiry, password changes, and revocation on Sign out. Password hashing stays scrypt.
-The [cookie controller](https://github.com/NathanChen198/streamlit-cookies-controller)
-writes browser cookies from JavaScript, so the cookie cannot be HttpOnly; do not
-inject untrusted JavaScript into this app. Tokens are signed, not encrypted, and
-contain an account id and random session id, never passwords. The account/session
-store is the existing SQLite database: losing that database invalidates the cookies.
+Use **Python 3.12**. Run these commands where you want the project. If you already
+have a copy, skip cloning and open that folder instead.
 
-## Model placement
-
-The trained single-class checkpoint is already stored at `models/best.pt`, where class
-`0` represents `pothole`. To use another checkpoint, set an absolute path for the current
-shell:
+### Windows PowerShell
 
 ```powershell
-$env:POTHOLE_MODEL_PATH = 'D:\models\pothole-best.pt'
-streamlit run app.py
+git clone https://github.com/ac708726-coder/POT-HOLE-DETECTION7.git
+cd POT-HOLE-DETECTION7
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-The project does not silently download generic weights because a general YOLO model is
-not trained for the required pothole class.
+### Linux
 
-## RDD2022 dataset and preparation
-
-For the next mixed-source model targeting phone close-ups, top-down views and small
-potholes, see [the retraining plan](training/README.md) and `training/data.yaml`.
-Training is manual. Thorough inference's highest input resolution is the tunable
-`THOROUGH_IMAGE_SIZE` constant in `config.py` (1280 by default); expect higher
-runtime/memory use on CPU than Fast/Balanced. This change is not a measured accuracy
-gain and cannot guarantee recovery of the reported misses.
-
-Use the public RDD2022 Road Damage Dataset. Start with the India subset from the
-[official repository](https://github.com/sekilab/RoadDamageDetector#dataset), or use the
-[official Figshare record](https://doi.org/10.6084/m9.figshare.21431547). Extract it so
-the project contains:
-
-```text
-data/raw/RDD2022/India/train/images/
-data/raw/RDD2022/India/train/annotations/xmls/
-data/raw/RDD2022/India/test/images/
+```bash
+git clone https://github.com/ac708726-coder/POT-HOLE-DETECTION7.git
+cd POT-HOLE-DETECTION7
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m streamlit run app.py
 ```
 
-The official training annotations are Pascal VOC XML. `scripts/prepare_dataset.py`
-keeps only `D40` pothole boxes, converts them to YOLO class `0`, and retains images with
-other damage types as useful negative pothole examples. Official test images have no
-annotations, so they are not used to report model accuracy.
+Open the local URL printed in the terminal, usually `http://localhost:8501`.
+Create an account, sign in, and choose a scan. In VS Code, select the project's
+`.venv` interpreter rather than a different system Python installation.
+
+Supported uploads are JPG, JPEG, and PNG images up to 10 MB, and MP4, MOV, and AVI
+videos up to 200 MB and five minutes. Longer videos and Thorough scans can be
+slow on a laptop or a free cloud instance.
+
+### Optional: use an NVIDIA GPU
+
+`requirements.txt` installs CPU builds of PyTorch and torchvision for Streamlit
+Cloud and CPU-only machines. After installing the requirements, replace those
+two packages with the matching CUDA builds if your driver supports CUDA 13.0.
+For Windows:
 
 ```powershell
-python scripts/prepare_dataset.py
-python scripts/check_dataset.py --root data/processed
+.\.venv\Scripts\python.exe -m pip install --upgrade torch==2.11.0+cu130 torchvision==0.26.0+cu130 --index-url https://download.pytorch.org/whl/cu130
+.\.venv\Scripts\python.exe -c "import torch; print(torch.__version__); print('CUDA available:', torch.cuda.is_available())"
 ```
 
-Preparation copies data into `data/processed`; it does not modify RDD2022. The default
-split is approximately 70% train, 20% validation, and 10% test. Blocks of 50 nearby
-numbered images stay together to reduce leakage from related road sequences. Re-running
-against existing processed files requires the explicit `--clean` flag.
+On Linux, use `.venv/bin/python` for those commands. A `+cu130` version and
+`CUDA available: True` confirm that the environment can use the GPU.
+Reinstalling `requirements.txt` restores its CPU pins.
 
-The installed checkpoint used all seven extracted subsets. To reproduce that prepared
-dataset, run:
+## Accounts and saved history
 
-```powershell
-python scripts/prepare_dataset.py --clean --countries China_Drone China_MotorBike Czech India Japan Norway United_States --max-train-negative-ratio 1.5
+Passwords are stored as salted scrypt hashes, not plain text. Each account can
+read its own saved history. Accounts, login sessions, and scan summaries live
+in `database/potholes.db`; generated media goes under `outputs/`.
+
+On a deployed app, those files are on the **server**, not on every visitor's
+laptop. Downloading a result saves a copy to your device.
+
+To stay signed in after refreshing, set `DIVOT_COOKIE_SIGNING_KEY` to a stable,
+random secret of at least 32 bytes. Use Cloud's **App settings → Secrets**, an
+environment variable, or a gitignored local `.streamlit/secrets.toml`. Generate
+your value privately:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-## Train, evaluate, and inspect
+Login cookies expire after seven days. Sign out revokes the session; rotating
+the signing key invalidates existing cookies. Without a valid key, sign-in
+lasts only for the current session. Cookies contain no passwords and are signed,
+not encrypted. The JavaScript cookie controller cannot set HttpOnly; the app
+should not render untrusted JavaScript.
 
-```powershell
-python training/train.py --model yolo11s.pt --epochs 25 --imgsz 640 --batch 16 --name full_s_25
-Copy-Item -LiteralPath 'runs\pothole\full_s_25\weights\best.pt' -Destination 'models\best.pt'
-python training/evaluate.py
-python training/predict_sample.py assets/sample_images
+**Streamlit Community Cloud does not provide durable local storage.** A rebuild,
+restart, or replacement container can remove the database and generated media.
+Cookies cannot preserve a deleted account. Use persistent storage and backups
+if history must survive redeploys. Never commit a signing key, real database,
+or `.streamlit/secrets.toml` to GitHub.
+
+## The model and its results
+
+The current checkpoint was fine-tuned on the seven country subsets of
+[RDD2022](https://github.com/sekilab/RoadDamageDetector). The preparation script
+converts Pascal VOC XML annotations into YOLO labels and keeps **D40: pothole**
+as class 0. Roads without a labelled pothole are included as negative examples.
+The prepared training split contains 6,395 images and 4,611 pothole boxes.
+
+Training used 60 base epochs followed by five low-learning-rate refinement
+epochs. The installed checkpoint was selected by validation fitness. Its
+recorded evaluation on a separate, labelled **3,925-image test split** was:
+
+| Metric | Result |
+|---|---:|
+| Precision | 55.20% |
+| Recall | 41.36% |
+| mAP at IoU 0.50 | 43.34% |
+| mAP at IoU 0.50–0.95 | 19.92% |
+
+These are object-detection metrics, not a single overall accuracy percentage.
+They describe checkpoint evaluation, not a promise about every photo or scan
+mode. The split includes negative road images, not just pothole photos.
+The [model card](docs/model_card.md) records the evaluation and earlier comparisons.
+
+A later fix corrected the RGB/BGR colour order passed to YOLO. On a separate
+1,000-image validation sample at confidence 0.35, Balanced found **79 correctly
+matched boxes instead of 52**, with 57 false boxes instead of 56. This improved
+the inference path without replacing the model. It is not a new held-out test
+score. See the [detection report](docs/detection_improvement_2026-10-01.md).
+
+The latest hard-example fine-tuning experiment made the full-validation results
+worse, so that candidate was rejected and **the original application model was
+kept**. The [experiment report](docs/hard_example_training_2026-10-01.md) records
+what was tried and why it was not promoted.
+
+## Where it still struggles
+
+Phone close-ups, top-down views, water-filled holes, poor lighting, and small or
+distant potholes can be missed. Shadows, repaired patches, drains, and puddles
+can produce false detections. More epochs alone have not solved those cases.
+The next useful experiment needs reviewed examples of the missing viewpoints
+and a separate holdout to check whether they actually help.
+
+The severity label uses the box's share of the image. It does **not** measure
+pothole depth, real-world size, or structural danger. Divot is a review tool,
+not a road-safety certification or a replacement for an on-site inspection.
+
+## Training and development
+
+You only need the dataset if you want to train or evaluate models. Download it
+from the [official RDD2022 repository](https://github.com/sekilab/RoadDamageDetector)
+or [Figshare record](https://doi.org/10.6084/m9.figshare.21431547). The unlabelled
+official test images are not the labelled holdout used for the scores above.
+
+The [training guide](training/README.md) covers preparation, additional close-up
+data, augmentations, evaluation, and hard-example mining. Scripts never install
+a candidate into the app automatically, and starting Streamlit does not launch
+training. Keep the existing model until a candidate passes a like-for-like
+evaluation.
+
+The project uses Streamlit for the interface, PyTorch and Ultralytics for the
+detector, Pillow and OpenCV for media, and SQLite for accounts and history.
+No TensorFlow or ONNX runtime is used.
+
+- `app.py` and `pages/`: sign-in, navigation, and inspection screens.
+- `utils/`: inference, image/video processing, tracking, auth, and storage.
+- `models/best.pt`: the checkpoint used by the app.
+- `scripts/`: dataset preparation, benchmarks, and database backups.
+- `training/`: training recipes, evaluation, and experiment records.
+- `tests/`: regression tests, including real-model blank-image smoke tests.
+
+From the project environment, run:
+
+```bash
+python -m pytest -q
+python -m ruff check .
+python -m black --check .
 ```
 
-Training downloads the selected pretrained checkpoint if Ultralytics does not already
-have it locally. Record every run in `training/experiments.md`. Evaluation writes
-held-out metrics and plots under `outputs/metrics`.
+The latest verified suite passed **127 tests**. The real-model smoke tests use
+the included checkpoint. Training data, experiment checkpoints, generated
+media, and secrets are excluded from Git.
 
-`training/experiments.md` carries a **Planned runs** queue with the exact commands for
-the next accuracy attempts. Before starting one, confirm all three prerequisites:
+## Deploying on Streamlit Cloud
 
-```powershell
-python -c "import torch, ultralytics; print(torch.__version__, torch.cuda.is_available())"
-Test-Path 'data\processed\images\train'
-python scripts\check_dataset.py --root data\processed
-```
+Select this repository, the `main` branch, `app.py`, and Python 3.12. Add the
+private signing key through Cloud Secrets for refresh-persistent login. Cloud
+uses the CPU dependencies in `requirements.txt` and system libraries in
+`packages.txt`.
 
-Training needs the prepared dataset, so run the `prepare_dataset.py` command above first
-if `data/processed` does not exist. Long runs benefit from `--patience` (early stopping)
-and `--save-period` (periodic checkpoints); an interrupted run continues with:
-
-```powershell
-python training/train.py --name <run-name> --resume
-```
-
-After a run beats the current checkpoint on the held-out split, promote it and re-record
-the metrics in `docs/model_card.md` and this file:
-
-```powershell
-Copy-Item -LiteralPath 'runs\pothole\<run-name>\weights\best.pt' -Destination 'models\best.pt'
-python training/evaluate.py
-```
-
-## Tests and code checks
-
-```powershell
-python -m pytest
-ruff check .
-black --check .
-```
-
-Tests use fake model outputs and do not require `best.pt`. The video integration test is
-skipped when OpenCV is unavailable.
-
-## Configuration
-
-Central settings live in `config.py`:
-
-- Image types: JPG, JPEG, PNG; maximum 10 MB.
-- Video types: MP4, MOV, AVI; maximum 200 MB and five minutes.
-- Default confidence: 0.35, a selective starting point that can be lowered when recall matters more.
-- Default IoU threshold: 0.50 (class-agnostic NMS).
-- Database: `database/potholes.db`, created only when history is used.
-
-Image inference includes three PyTorch modes: Fast uses one standard 640-pixel pass,
-Balanced uses test-time augmentation, and Thorough merges augmented 640- and 1280-pixel
-passes. Overlapping boxes from multiple passes are merged with NMS. Video defaults to
-Fast mode to preserve throughput.
-CUDA laptops automatically use FP16 inference and four-frame video batching. Balanced
-video mode also batches, at half that size, because test-time augmentation multiplies
-activation memory per frame. CPU-only laptops stay on FP32 with batch size one, so the
-same code remains portable.
-
-Both detection pages warm the model up once while the upload controls are on screen, so
-the first real scan does not pay CUDA context and autotuning cost. Warm-up is best
-effort: if the checkpoint is missing or broken, the page still renders and the error is
-reported by the scan itself.
-
-Verify the GPU path is actually active before benchmarking, because installing
-`requirements.txt` without the CUDA index URL above silently yields a CPU-only build:
-
-```powershell
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-```
-
-A `+cpu` version string or `False` means inference runs on CPU regardless of the
-available hardware.
-
-### Verify detection changes with real labelled images
-
-Pillow/UI images and this application's NumPy inputs are RGB. Before calling YOLO,
-`image_to_bgr()` creates a contiguous BGR NumPy buffer, as required by
-[Ultralytics' input contract](https://docs.ultralytics.com/modes/predict/#inference-sources).
-This applies to single images, batched video frames, and failure-case evaluation.
-Changing colour order does not retrain or replace `models/best.pt`.
-
-```powershell
-python scripts/benchmark_detection_recall.py --positives 100 --negatives 900 --seed 99 --output outputs/metrics/color_fix_confirmation.json
-```
-
-The benchmark uses the existing **validation** split, keeps negative road images,
-and compares the legacy colour bug with the corrected application path using the
-same weights, images, confidence and matching IoU. It writes per-image predictions,
-precision/recall at 0.15/0.25/0.35, and illustrative recovery images. These are
-sample operating-point metrics, **not test mAP or an overall accuracy claim**.
-Run GPU comparisons one at a time on a laptop. Experimental crop/scale variants
-are available only in the benchmark; they are not enabled in the application.
-
-## Limitations
-
-Detection quality depends on the final dataset and checkpoint. Shadows, patches,
-drains, debris, water, lighting, and camera angle can cause errors. Apparent severity is
-based only on relative box area and does not measure depth or real dimensions. Video
-tracking is an estimate. The tool does not guarantee road safety or make maintenance
-decisions.
-
-## Held-out test results
-
-The selected checkpoint was evaluated once on the untouched 3,925-image multinational
-held-out split containing 660 pothole boxes.
-
-| Metric | Installed | 60-epoch stage | Earlier checkpoint |
-|---|---:|---:|---:|
-| Precision | **0.5520** | 0.5300 | 0.4820 |
-| Recall | 0.4136 | 0.4212 | 0.4015 |
-| mAP@0.50 | **0.4334** | 0.4260 | 0.4011 |
-| mAP@0.50–0.95 | **0.1992** | 0.1960 | 0.1769 |
-| GPU inference time | 5.7 ms/image | 5.7 ms/image | 5.5 ms/image |
-
-All columns come from the same script and the same split, evaluated on the same day, so
-they are directly comparable. Two changes produced the gain: training length (the earlier
-checkpoint's schedule ended while the model was still improving), then a low-rate AdamW
-refinement stage on top. Recall is the one metric the refinement stage did not improve —
-it traded a little recall for more precision.
-
-These results do not meet the aspirational PRD targets. Improving them requires more
-training and data balancing/curation; they must not be presented as production accuracy.
-The confidence control changes the precision/recall tradeoff; a confidence percentage
-must not be presented as overall model accuracy.
-
-See `docs/user_guide.md`, `docs/model_card.md`, and `docs/PRD.md` for further details.
-To run this in production, follow `docs/deployment.md` — it covers TLS, environment
-variables, logging, backups, and the pre-release checks.
+Cloud follows its configured branch: an app still tracking
+`deploy/streamlit-cloud` will not pick up a merge into `main`. Check build logs
+after a release, and remember the storage limitations above before relying on
+saved history. The [deployment guide](docs/deployment.md) covers the full setup,
+backups, and rollback.
